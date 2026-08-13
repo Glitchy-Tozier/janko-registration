@@ -1,6 +1,7 @@
 # Files that should not be shared publicly
 data/backgrounds/
 data/synthetic/
+data/.storage/
 
 # Python-generated files
 __pycache__/

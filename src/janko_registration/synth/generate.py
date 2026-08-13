@@ -36,7 +36,7 @@ class GeneratorConfig:
     rotation_max_degrees: float = 25.0
 
     # Maximum perspective displacement as a fraction of the piano size.
-    perspective_strength: float = 0.1
+    perspective_strength: float = 0.05
 
     brightness_range: tuple[float, float] = (0.5, 2)
     contrast_range: tuple[float, float] = (0.5, 2)
