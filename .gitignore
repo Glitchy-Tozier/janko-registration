@@ -1,0 +1,14 @@
+# Files that should not be shared publicly
+data/backgrounds/
+data/synthetic/
+
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
