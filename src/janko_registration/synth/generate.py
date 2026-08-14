@@ -38,8 +38,8 @@ class GeneratorConfig:
     # Maximum perspective displacement as a fraction of the piano size.
     perspective_strength: float = 0.05
 
-    brightness_range: tuple[float, float] = (0.5, 2)
-    contrast_range: tuple[float, float] = (0.5, 2)
+    brightness_range: tuple[float, float] = (0.5, 1.5)
+    contrast_range: tuple[float, float] = (0.5, 1.5)
 
     blur_probability: float = 0.40
     noise_probability: float = 0.40
@@ -826,7 +826,14 @@ def generate_sample(
             image_height=config.image_height,
         )
 
-        if len(visible_key_indices) >= 2:
+        shows_sufficient_keys = len(visible_key_indices) >= 30
+        even_idx_count = sum([True for v in visible_key_indices if v % 2 == 0])
+        odd_idx_count = sum([True for v in visible_key_indices if v % 2 == 1])
+        odd_even_diff = abs(even_idx_count - odd_idx_count)
+        odd_even_diff_acceptable = odd_even_diff <= 5
+
+        if shows_sufficient_keys and odd_even_diff_acceptable:
+            # print("Found fitting image after", attempt_number, "attempts.")
             break
 
     else:
@@ -937,11 +944,15 @@ def generate_dataset(
 
     random_generator = np.random.default_rng(seed)
 
-    print("Creating canonical Janko geometry...")
+    print("Creating canonical Janko geometry ...", end=" ")
 
     piano_geometry = create_full_janko_geometry()
 
-    print(f"Loading backgrounds from {background_directory}...")
+    print(
+        f" Done!\nLoading backgrounds from {background_directory} ...",
+        end=" ",
+        flush=True,
+    )
 
     backgrounds = load_backgrounds(background_directory)
 
@@ -985,8 +996,11 @@ def generate_dataset(
 
             labels_file.write(json.dumps(metadata) + "\n")
 
+            if (sample_index + 1) % 10 == 0:
+                print("▉", end="", flush=True)
+
             if (sample_index + 1) % 100 == 0:
-                print(f"Generated {sample_index + 1}/{sample_count}")
+                print(f" Generated {sample_index + 1}/{sample_count}")
 
 
 def main() -> None:
