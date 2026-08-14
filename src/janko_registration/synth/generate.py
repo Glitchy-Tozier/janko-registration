@@ -49,6 +49,10 @@ class GeneratorConfig:
 
     jpeg_probability: float = 0.20
 
+    # Opacity range for the texture/image overlaid on the piano.
+    # The actual opacity varies spatially between these values.
+    overlay_alpha_range: tuple[float, float] = (0.0, 0.3)
+
 
 def transform_points(
     canonical_points: np.ndarray,
@@ -325,7 +329,6 @@ def prepare_background(
     # After resizing, these are the possible ranges for the
     # top-left corner of the target crop.
     maximum_crop_x = resized_width - target_image_width
-
     maximum_crop_y = resized_height - target_image_height
 
     crop_x = (
@@ -406,16 +409,22 @@ def draw_piano(
     homography: np.ndarray,
     config: GeneratorConfig,
     rng: np.random.Generator,
-) -> None:
+) -> np.ndarray:
     """
     Draw the transformed Janko piano onto an OpenCV image.
+
+    Returns:
+        A binary mask indicating which pixels belong to the piano.
     """
+
+    piano_mask = np.zeros(image.shape[:2], dtype=np.uint8)
 
     def random_shift_RGB(number: int) -> int:
         summand = rng.integers(-config.color_variance, config.color_variance)
-        modifed_nr = number + summand
-        clipped_nr = np.clip(modifed_nr, 0, 255)
-        return int(clipped_nr)
+        modified_number = number + summand
+        clipped_number = np.clip(modified_number, 0, 255)
+
+        return int(clipped_number)
 
     for key in piano_geometry.keys:
         transformed_polygons = [
@@ -442,12 +451,124 @@ def draw_piano(
         for polygon in transformed_polygons:
             polygon_pixels = np.round(polygon).astype(np.int32)
 
+            # Draw the actual piano.
             cv2.fillPoly(
                 image,
                 [polygon_pixels],
                 fill_color,
                 lineType=cv2.LINE_AA,
             )
+
+            # Draw the same polygon into a separate mask.
+            cv2.fillPoly(
+                piano_mask,
+                [polygon_pixels],
+                255,
+                lineType=cv2.LINE_AA,
+            )
+
+    return piano_mask
+
+
+def make_spatial_alpha_map(
+    image_width: int,
+    image_height: int,
+    alpha_range: tuple[float, float],
+    rng: np.random.Generator,
+) -> np.ndarray:
+    """
+    Create a smoothly varying spatial opacity map.
+
+    Rather than assigning a completely independent alpha value to
+    every pixel, a small random map is generated and enlarged.
+    This creates broad, natural-looking changes in opacity.
+    """
+    alpha_min, alpha_max = alpha_range
+
+    alpha_small = rng.uniform(
+        alpha_min,
+        alpha_max,
+        size=(8, 8),
+    ).astype(np.float32)
+
+    alpha = cv2.resize(
+        alpha_small,
+        (
+            image_width,
+            image_height,
+        ),
+        interpolation=cv2.INTER_CUBIC,
+    )
+
+    alpha = cv2.GaussianBlur(
+        alpha,
+        ksize=(0, 0),
+        sigmaX=max(image_width, image_height) / 30.0,
+    )
+
+    return np.clip(
+        alpha,
+        0.0,
+        1.0,
+    )
+
+
+def apply_piano_overlay(
+    image: np.ndarray,
+    overlay: np.ndarray,
+    piano_mask: np.ndarray,
+    config: GeneratorConfig,
+    rng: np.random.Generator,
+) -> np.ndarray:
+    """
+    Blend an image over the piano with smoothly varying opacity.
+
+    The overlay is only applied where the piano mask is present.
+
+    The existing `blur_probability` is reused to decide whether the
+    overlay itself receives Gaussian blur.
+    """
+    height, width = image.shape[:2]
+
+    overlay = cv2.resize(
+        overlay,
+        (width, height),
+        interpolation=cv2.INTER_LINEAR,
+    )
+
+    # Optionally blur the overlay.
+    if rng.random() < config.blur_probability:
+        blur_sigma = rng.uniform(0.3, 2.0)
+
+        overlay = cv2.GaussianBlur(
+            overlay,
+            ksize=(0, 0),
+            sigmaX=blur_sigma,
+        )
+
+    # Generate spatially varying opacity.
+    alpha = make_spatial_alpha_map(
+        image_width=width,
+        image_height=height,
+        alpha_range=config.overlay_alpha_range,
+        rng=rng,
+    )
+
+    # Restrict the overlay to the piano.
+    piano_mask_float = piano_mask.astype(np.float32) / 255.0
+
+    alpha *= piano_mask_float
+
+    # Convert HxW -> HxWx1 so it broadcasts over BGR channels.
+    alpha = alpha[:, :, None]
+
+    # Alpha compositing.
+    image_float = image.astype(np.float32)
+    overlay_float = overlay.astype(np.float32)
+
+    result = image_float * (1.0 - alpha) + overlay_float * alpha
+
+    return np.clip(result, 0, 255).astype(np.uint8)
 
 
 def polygon_is_fully_visible(
@@ -586,8 +707,8 @@ def apply_appearance_effects(
 
     contrast_factor = rng.uniform(*config.contrast_range)
 
-    # Shift the image so that 127.5 is the midpoint, multiply the
-    # distance from that midpoint, then shift back.
+    # Shift the image so that 127.5 is the midpoint,
+    # multiply the distance from that midpoint, then shift back.
     result = (result - 127.5) * contrast_factor + 127.5
 
     result = np.clip(
@@ -715,19 +836,52 @@ def generate_sample(
             f"{maximum_attempts} attempts."
         )
 
+    # ------------------------------------------------------------
+    # Background.
+    # ------------------------------------------------------------
+
     image = choose_background(
         backgrounds,
         config,
         rng,
     )
 
-    draw_piano(
+    # ------------------------------------------------------------
+    # Draw the opaque piano and obtain a piano mask.
+    # ------------------------------------------------------------
+
+    piano_mask = draw_piano(
         image,
         piano_geometry,
         homography,
         config,
         rng,
     )
+
+    # ------------------------------------------------------------
+    # Add a second randomly selected image over the piano.
+    #
+    # We deliberately reuse choose_background() here. It already
+    # performs random image selection, resizing, cropping and flipping.
+    # ------------------------------------------------------------
+
+    overlay = choose_background(
+        backgrounds,
+        config,
+        rng,
+    )
+
+    image = apply_piano_overlay(
+        image,
+        overlay,
+        piano_mask,
+        config,
+        rng,
+    )
+
+    # ------------------------------------------------------------
+    # Ground-truth bounding box for the visible keys.
+    # ------------------------------------------------------------
 
     canonical_visible_key_bbox = get_canonical_bbox_for_keys(
         piano_geometry,
@@ -738,6 +892,10 @@ def generate_sample(
         canonical_visible_key_bbox,
         homography,
     )
+
+    # ------------------------------------------------------------
+    # Global image effects.
+    # ------------------------------------------------------------
 
     image = apply_appearance_effects(
         image,
@@ -819,7 +977,7 @@ def generate_dataset(
                 raise RuntimeError(f"Could not write image to {image_path}")
 
             metadata = {
-                "image": (f"images/{filename}"),
+                "image": f"images/{filename}",
                 "corners": target_corners.tolist(),
                 "visible_keys": visible_key_indices,
                 "homography": homography.tolist(),
