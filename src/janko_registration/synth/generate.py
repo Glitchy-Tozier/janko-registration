@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -108,10 +107,10 @@ def rotation_matrix(
 
     Multiplying a point by this matrix rotates it around the origin.
     """
-    angle_radians = math.radians(angle_degrees)
+    angle_radians = np.radians(angle_degrees)
 
-    cosine = math.cos(angle_radians)
-    sine = math.sin(angle_radians)
+    cosine = np.cos(angle_radians)
+    sine = np.sin(angle_radians)
 
     return np.array(
         [
