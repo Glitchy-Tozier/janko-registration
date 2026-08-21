@@ -47,7 +47,7 @@ class GeneratorConfig:
     flip_x_probability: float = 0.5
     flip_y_probability: float = 0.5
 
-    jpeg_probability: float = 0.20
+    jpeg_probability: float = 0.50
 
     # Opacity range for the texture/image overlaid on the piano.
     # The actual opacity varies spatially between these values.
@@ -787,7 +787,7 @@ def apply_appearance_effects(
     return result
 
 
-def generate_sample(
+def generate_sample_image(
     piano_geometry: PianoGeometry,
     backgrounds: list[np.ndarray],
     config: GeneratorConfig,
@@ -807,6 +807,10 @@ def generate_sample(
         indices of fully visible keys
         homography used to place the piano
     """
+
+    # ------------------------------------------------------------
+    # Janko Piano homography
+    # ------------------------------------------------------------
     maximum_attempts = 1000
 
     for attempt_number in range(
@@ -827,6 +831,7 @@ def generate_sample(
         )
 
         shows_sufficient_keys = len(visible_key_indices) >= 30
+
         even_idx_count = sum([True for v in visible_key_indices if v % 2 == 0])
         odd_idx_count = sum([True for v in visible_key_indices if v % 2 == 1])
         odd_even_diff = abs(even_idx_count - odd_idx_count)
@@ -934,7 +939,6 @@ def generate_dataset(
     )
 
     image_directory = output_directory / "images"
-
     image_directory.mkdir(
         parents=True,
         exist_ok=True,
@@ -945,9 +949,7 @@ def generate_dataset(
     random_generator = np.random.default_rng(seed)
 
     print("Creating canonical Janko geometry ...", end=" ")
-
     piano_geometry = create_full_janko_geometry()
-
     print(
         f" Done!\nLoading backgrounds from {background_directory} ...",
         end=" ",
@@ -955,7 +957,6 @@ def generate_dataset(
     )
 
     backgrounds = load_backgrounds(background_directory)
-
     print(f"Loaded {len(backgrounds)} background(s).")
 
     with labels_path.open(
@@ -963,22 +964,17 @@ def generate_dataset(
         encoding="utf-8",
     ) as labels_file:
         for sample_index in range(sample_count):
-            (
-                image,
-                target_corners,
-                visible_key_indices,
-                homography,
-            ) = generate_sample(
-                piano_geometry,
-                backgrounds,
-                config,
-                random_generator,
+            (image, target_corners, visible_key_indices, homography) = (
+                generate_sample_image(
+                    piano_geometry,
+                    backgrounds,
+                    config,
+                    random_generator,
+                )
             )
 
             filename = f"{sample_index:06d}.png"
-
             image_path = image_directory / filename
-
             write_success = cv2.imwrite(
                 str(image_path),
                 image,
