@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import json
-from dataclasses import dataclass
 from pathlib import Path
 
 import cv2
@@ -14,43 +13,7 @@ from janko_registration.geometry.janko import (
     create_full_janko_geometry,
 )
 from janko_registration.piano.janko_piano_base import BLACK_INDICES
-
-
-@dataclass
-class GeneratorConfig:
-    """Configuration controlling synthetic image generation."""
-
-    base_image_width: int = 1920
-    base_image_height: int = 1080
-
-    piano_white_min_brightness: int = 150
-    piano_black_max_brightness: int = 100
-    color_variance: int = 10  # up to plus or minus that number to every RGB number
-
-    # Desired width of the complete piano as a fraction of the image width.
-    piano_width_min_fraction: float = 0.5
-    piano_width_max_fraction: float = 2.0
-
-    rotation_min_degrees: float = -25.0
-    rotation_max_degrees: float = 25.0
-
-    # Maximum perspective displacement as a fraction of the piano size.
-    perspective_strength: float = 0.05
-
-    brightness_range: tuple[float, float] = (0.5, 1.5)
-    contrast_range: tuple[float, float] = (0.5, 1.5)
-
-    blur_probability: float = 0.40
-    noise_probability: float = 0.40
-
-    flip_x_probability: float = 0.5
-    flip_y_probability: float = 0.5
-
-    jpeg_probability: float = 0.50
-
-    # Opacity range for the texture/image overlaid on the piano.
-    # The actual opacity varies spatially between these values.
-    overlay_alpha_range: tuple[float, float] = (0.0, 0.3)
+from janko_registration.utils import Config
 
 
 def transform_points(
@@ -123,7 +86,7 @@ def rotation_matrix(
 
 def make_random_homography(
     piano_geometry: PianoGeometry,
-    config: GeneratorConfig,
+    config: Config,
     rng: np.random.Generator,
 ) -> np.ndarray:
     """
@@ -156,8 +119,8 @@ def make_random_homography(
     # ------------------------------------------------------------
 
     target_piano_width_pixels = rng.uniform(
-        config.base_image_width * config.piano_width_min_fraction,
-        config.base_image_width * config.piano_width_max_fraction,
+        config.generator.base_image_width * config.generator.piano_width_min_fraction,
+        config.generator.base_image_width * config.generator.piano_width_max_fraction,
     )
 
     scale_factor = target_piano_width_pixels / canonical_width
@@ -169,8 +132,8 @@ def make_random_homography(
     # ------------------------------------------------------------
 
     rotation_angle_degrees = rng.uniform(
-        config.rotation_min_degrees,
-        config.rotation_max_degrees,
+        config.generator.rotation_min_degrees,
+        config.generator.rotation_max_degrees,
     )
 
     rotated_bounding_box = (
@@ -185,13 +148,13 @@ def make_random_homography(
     # ------------------------------------------------------------
 
     piano_center_x_pixels = rng.uniform(
-        -0.25 * config.base_image_width,
-        1.25 * config.base_image_width,
+        -0.25 * config.generator.base_image_width,
+        1.25 * config.generator.base_image_width,
     )
 
     piano_center_y_pixels = rng.uniform(
-        -0.25 * config.base_image_height,
-        1.25 * config.base_image_height,
+        -0.25 * config.generator.base_image_height,
+        1.25 * config.generator.base_image_height,
     )
 
     transformed_bounding_box = rotated_bounding_box.copy()
@@ -212,11 +175,11 @@ def make_random_homography(
     )
 
     maximum_horizontal_perspective_shift = (
-        rotated_piano_width_pixels * config.perspective_strength
+        rotated_piano_width_pixels * config.generator.perspective_strength
     )
 
     maximum_vertical_perspective_shift = (
-        rotated_piano_height_pixels * config.perspective_strength
+        rotated_piano_height_pixels * config.generator.perspective_strength
     )
 
     perspective_offsets = rng.uniform(
@@ -290,7 +253,7 @@ def load_backgrounds(
 
 def prepare_background(
     source_background: np.ndarray,
-    config: GeneratorConfig,
+    config: Config,
     rng: np.random.Generator,
 ) -> np.ndarray:
     """
@@ -303,8 +266,8 @@ def prepare_background(
     source_height, source_width = source_background.shape[:2]
 
     resize_scale = max(
-        config.base_image_width / source_width,
-        config.base_image_height / source_height,
+        config.generator.base_image_width / source_width,
+        config.generator.base_image_height / source_height,
     )
 
     resized_width = max(
@@ -325,8 +288,8 @@ def prepare_background(
 
     # After resizing, these are the possible ranges for the
     # top-left corner of the target crop.
-    maximum_crop_x = resized_width - config.base_image_width
-    maximum_crop_y = resized_height - config.base_image_height
+    maximum_crop_x = resized_width - config.generator.base_image_width
+    maximum_crop_y = resized_height - config.generator.base_image_height
 
     crop_x = (
         0
@@ -351,29 +314,29 @@ def prepare_background(
     )
 
     cropped_background = resized_background[
-        crop_y : crop_y + config.base_image_height,
-        crop_x : crop_x + config.base_image_width,
+        crop_y : crop_y + config.generator.base_image_height,
+        crop_x : crop_x + config.generator.base_image_width,
     ]
 
     # This should only happen for unusual input dimensions.
     # The resize is a final safety net.
     if cropped_background.shape[:2] != (
-        config.base_image_height,
-        config.base_image_width,
+        config.generator.base_image_height,
+        config.generator.base_image_width,
     ):
         cropped_background = cv2.resize(
             cropped_background,
             (
-                config.base_image_width,
-                config.base_image_height,
+                config.generator.base_image_width,
+                config.generator.base_image_height,
             ),
             interpolation=cv2.INTER_AREA,
         )
 
     flipped_background = cropped_background
-    if rng.random() <= config.flip_x_probability:
+    if rng.random() <= config.generator.flip_x_probability:
         flipped_background = cv2.flip(flipped_background, 0)
-    if rng.random() <= config.flip_y_probability:
+    if rng.random() <= config.generator.flip_y_probability:
         flipped_background = cv2.flip(flipped_background, 1)
 
     return flipped_background
@@ -381,7 +344,7 @@ def prepare_background(
 
 def choose_background(
     backgrounds: list[np.ndarray],
-    config: GeneratorConfig,
+    config: Config,
     rng: np.random.Generator,
 ) -> np.ndarray:
     """
@@ -402,7 +365,7 @@ def draw_piano(
     image: np.ndarray,
     piano_geometry: PianoGeometry,
     homography: np.ndarray,
-    config: GeneratorConfig,
+    config: Config,
     rng: np.random.Generator,
 ) -> np.ndarray:
     """
@@ -415,7 +378,9 @@ def draw_piano(
     piano_mask = np.zeros(image.shape[:2], dtype=np.uint8)
 
     def random_shift_RGB(number: int) -> int:
-        summand = rng.integers(-config.color_variance, config.color_variance)
+        summand = rng.integers(
+            -config.generator.color_variance, config.generator.color_variance
+        )
         modified_number = number + summand
         clipped_number = np.clip(modified_number, 0, 255)
 
@@ -432,9 +397,13 @@ def draw_piano(
 
         is_white = key.index % 12 not in BLACK_INDICES
         gray_value = (
-            rng.integers(config.piano_white_min_brightness, 255, endpoint=True)
+            rng.integers(
+                config.generator.piano_white_min_brightness, 255, endpoint=True
+            )
             if is_white
-            else rng.integers(0, config.piano_black_max_brightness, endpoint=True)
+            else rng.integers(
+                0, config.generator.piano_black_max_brightness, endpoint=True
+            )
         )
 
         fill_color = (
@@ -512,7 +481,7 @@ def apply_piano_overlay(
     image: np.ndarray,
     overlay: np.ndarray,
     piano_mask: np.ndarray,
-    config: GeneratorConfig,
+    config: Config,
     rng: np.random.Generator,
 ) -> np.ndarray:
     """
@@ -532,7 +501,7 @@ def apply_piano_overlay(
     )
 
     # Optionally blur the overlay.
-    if rng.random() < config.blur_probability:
+    if rng.random() < config.generator.blur_probability:
         blur_sigma = rng.uniform(0.3, 2.0)
 
         overlay = cv2.GaussianBlur(
@@ -545,7 +514,7 @@ def apply_piano_overlay(
     alpha = make_spatial_alpha_map(
         image_width=width,
         image_height=height,
-        alpha_range=config.overlay_alpha_range,
+        alpha_range=config.generator.overlay_alpha_range,
         rng=rng,
     )
 
@@ -680,7 +649,7 @@ def get_canonical_bbox_for_keys(
 
 def apply_appearance_effects(
     image: np.ndarray,
-    config: GeneratorConfig,
+    config: Config,
     rng: np.random.Generator,
 ) -> np.ndarray:
     """
@@ -692,7 +661,7 @@ def apply_appearance_effects(
     # Brightness
     # ------------------------------------------------------------
 
-    brightness_factor = rng.uniform(*config.brightness_range)
+    brightness_factor = rng.uniform(*config.generator.brightness_range)
 
     result *= brightness_factor
 
@@ -700,7 +669,7 @@ def apply_appearance_effects(
     # Contrast
     # ------------------------------------------------------------
 
-    contrast_factor = rng.uniform(*config.contrast_range)
+    contrast_factor = rng.uniform(*config.generator.contrast_range)
 
     # Shift the image so that 127.5 is the midpoint,
     # multiply the distance from that midpoint, then shift back.
@@ -716,7 +685,7 @@ def apply_appearance_effects(
     # Blur
     # ------------------------------------------------------------
 
-    if rng.random() < config.blur_probability:
+    if rng.random() < config.generator.blur_probability:
         blur_sigma = rng.uniform(
             0.3,
             2.0,
@@ -732,7 +701,7 @@ def apply_appearance_effects(
     # Sensor-like noise
     # ------------------------------------------------------------
 
-    if rng.random() < config.noise_probability:
+    if rng.random() < config.generator.noise_probability:
         noise_sigma = rng.uniform(
             1.0,
             10.0,
@@ -756,7 +725,7 @@ def apply_appearance_effects(
     # JPEG compression artifacts
     # ------------------------------------------------------------
 
-    if rng.random() < config.jpeg_probability:
+    if rng.random() < config.generator.jpeg_probability:
         jpeg_quality = int(
             rng.integers(
                 20,
@@ -785,7 +754,7 @@ def apply_appearance_effects(
 def generate_sample_image(
     piano_geometry: PianoGeometry,
     backgrounds: list[np.ndarray],
-    config: GeneratorConfig,
+    config: Config,
     rng: np.random.Generator,
 ) -> tuple[
     np.ndarray,
@@ -821,8 +790,8 @@ def generate_sample_image(
         visible_key_indices = get_visible_key_indices(
             piano_geometry,
             homography,
-            image_width=config.base_image_width,
-            image_height=config.base_image_height,
+            image_width=config.generator.base_image_width,
+            image_height=config.generator.base_image_height,
         )
 
         shows_sufficient_keys = len(visible_key_indices) >= 30
@@ -910,6 +879,8 @@ def generate_sample_image(
         rng,
     )
 
+    image = cv2.resize(image, config.global_config.synthetic_resolution)
+
     return (
         image,
         target_corners,
@@ -922,7 +893,7 @@ def generate_dataset(
     output_directory: Path,
     background_directory: Path,
     sample_count: int,
-    config: GeneratorConfig,
+    config: Config,
     seed: int | None = None,
 ) -> None:
     """
@@ -1028,7 +999,7 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    config = GeneratorConfig()
+    config = Config()
 
     generate_dataset(
         output_directory=args.output,
