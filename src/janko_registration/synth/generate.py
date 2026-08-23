@@ -20,8 +20,8 @@ from janko_registration.piano.janko_piano_base import BLACK_INDICES
 class GeneratorConfig:
     """Configuration controlling synthetic image generation."""
 
-    image_width: int = 1920
-    image_height: int = 1080
+    base_image_width: int = 1920
+    base_image_height: int = 1080
 
     piano_white_min_brightness: int = 150
     piano_black_max_brightness: int = 100
@@ -156,8 +156,8 @@ def make_random_homography(
     # ------------------------------------------------------------
 
     target_piano_width_pixels = rng.uniform(
-        config.image_width * config.piano_width_min_fraction,
-        config.image_width * config.piano_width_max_fraction,
+        config.base_image_width * config.piano_width_min_fraction,
+        config.base_image_width * config.piano_width_max_fraction,
     )
 
     scale_factor = target_piano_width_pixels / canonical_width
@@ -185,13 +185,13 @@ def make_random_homography(
     # ------------------------------------------------------------
 
     piano_center_x_pixels = rng.uniform(
-        -0.25 * config.image_width,
-        1.25 * config.image_width,
+        -0.25 * config.base_image_width,
+        1.25 * config.base_image_width,
     )
 
     piano_center_y_pixels = rng.uniform(
-        -0.25 * config.image_height,
-        1.25 * config.image_height,
+        -0.25 * config.base_image_height,
+        1.25 * config.base_image_height,
     )
 
     transformed_bounding_box = rotated_bounding_box.copy()
@@ -290,8 +290,6 @@ def load_backgrounds(
 
 def prepare_background(
     source_background: np.ndarray,
-    target_image_width: int,
-    target_image_height: int,
     config: GeneratorConfig,
     rng: np.random.Generator,
 ) -> np.ndarray:
@@ -305,8 +303,8 @@ def prepare_background(
     source_height, source_width = source_background.shape[:2]
 
     resize_scale = max(
-        target_image_width / source_width,
-        target_image_height / source_height,
+        config.base_image_width / source_width,
+        config.base_image_height / source_height,
     )
 
     resized_width = max(
@@ -327,8 +325,8 @@ def prepare_background(
 
     # After resizing, these are the possible ranges for the
     # top-left corner of the target crop.
-    maximum_crop_x = resized_width - target_image_width
-    maximum_crop_y = resized_height - target_image_height
+    maximum_crop_x = resized_width - config.base_image_width
+    maximum_crop_y = resized_height - config.base_image_height
 
     crop_x = (
         0
@@ -353,21 +351,21 @@ def prepare_background(
     )
 
     cropped_background = resized_background[
-        crop_y : crop_y + target_image_height,
-        crop_x : crop_x + target_image_width,
+        crop_y : crop_y + config.base_image_height,
+        crop_x : crop_x + config.base_image_width,
     ]
 
     # This should only happen for unusual input dimensions.
     # The resize is a final safety net.
     if cropped_background.shape[:2] != (
-        target_image_height,
-        target_image_width,
+        config.base_image_height,
+        config.base_image_width,
     ):
         cropped_background = cv2.resize(
             cropped_background,
             (
-                target_image_width,
-                target_image_height,
+                config.base_image_width,
+                config.base_image_height,
             ),
             interpolation=cv2.INTER_AREA,
         )
@@ -395,8 +393,6 @@ def choose_background(
 
     return prepare_background(
         source_background,
-        target_image_width=config.image_width,
-        target_image_height=config.image_height,
         config=config,
         rng=rng,
     )
@@ -825,8 +821,8 @@ def generate_sample_image(
         visible_key_indices = get_visible_key_indices(
             piano_geometry,
             homography,
-            image_width=config.image_width,
-            image_height=config.image_height,
+            image_width=config.base_image_width,
+            image_height=config.base_image_height,
         )
 
         shows_sufficient_keys = len(visible_key_indices) >= 30
@@ -992,7 +988,7 @@ def generate_dataset(
             labels_file.write(json.dumps(metadata) + "\n")
 
             if (sample_index + 1) % 10 == 0:
-                print("▉", end="", flush=True)
+                print("█", end="", flush=True)
 
             if (sample_index + 1) % 100 == 0:
                 print(f" Generated {sample_index + 1}/{sample_count}")
