@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import argparse
 import json
 import time
@@ -157,11 +159,17 @@ class NeuralNetwork(torch.nn.Module):
         return x
 
 
-def compute_accuracy(model: NeuralNetwork, dataloader: PictureDataset, config: Config):
+def compute_loss_on_testset(
+    model: NeuralNetwork,
+    dataloader: PictureDataset,
+    criterion: torch.nn.L1Loss,
+    config: Config,
+) -> tuple[float, float]:
     model.eval()
-    mse_1 = []
-    mse_2 = []
+    mae_1 = []
+    mae_2 = []
 
+    # Loop through batches of the dataset to prevent memory issues
     for idx, (features, labels) in enumerate(dataloader):
         with torch.no_grad():
             pred_points = model(features)  # [B, 4, 2]
@@ -175,18 +183,13 @@ def compute_accuracy(model: NeuralNetwork, dataloader: PictureDataset, config: C
         true_points_sdown[:, :, 0] /= config.generator.base_image_width
         true_points_sdown[:, :, 1] /= config.generator.base_image_height
 
-        loss_1 = F.mse_loss(pred_points, true_points_sdown)  # Loss function
-        loss_2 = F.mse_loss(pred_points_sup, true_points)  # Loss function
+        mae_1.append(criterion(pred_points, true_points_sdown))  # Loss function
+        mae_2.append(criterion(pred_points_sup, true_points))  # Loss function
 
-        mse_1.append(loss_1)
-        mse_2.append(loss_2)
+    print("\nMAE mean over test dataset:", np.mean(mae_1), "(downscaled)")
+    print("MAE mean over test dataset:", np.mean(mae_2), "(in px)\n")
 
-    print(mse_1)
-    print(np.mean(mse_1))
-    print(mse_2)
-    print(np.mean(mse_2))
-
-    return  # (correct / total_examples).item()
+    return np.mean(mae_1), np.mean(mae_2)
 
 
 def main() -> None:
@@ -282,9 +285,11 @@ def main() -> None:
                 flush=True,
             )
 
-        model.eval()
+        # model.eval()
         # Optional model evaluation
-        compute_accuracy(model, test_loader, config)
+        # compute_loss_on_testset(model, test_loader, criterion, config)
+
+    compute_loss_on_testset(model, test_loader, criterion, config)
 
     # Save model
     model_dir = config.global_config.model_dir
