@@ -2,6 +2,8 @@ global_config:
   synthetic_data_dir: "data/synthetic"
   synthetic_resolution: [960, 540] # 960x540, 854x480, 768x432, 640x360, 480x270, 426x240
 
+  test_split_fraction: 0.2
+
   model_dir: "data/models"
 
 generator:

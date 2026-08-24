@@ -8,7 +8,6 @@ from pathlib import Path
 import cv2
 import numpy as np
 import torch
-import torch.nn.functional as F
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, Dataset
 
@@ -18,7 +17,7 @@ from janko_registration.utils import Config, format_duration, get_datetime_str
 class PictureDataset(Dataset):
     @staticmethod
     def load_synthetic_data(
-        source_dir: Path, desired_img_count: int, debugging: bool = False
+        source_dir: Path, desired_img_count: int
     ) -> tuple[list, list]:
         """
         Load all images from a directory.
@@ -69,7 +68,7 @@ class PictureDataset(Dataset):
                     print("█", end="", flush=True)
 
                 if (idx + 1) % 100 == 0:
-                    print(f" Loaded {idx + 1}/{desired_img_count}")
+                    print(f" Loaded {idx + 1}/{len(labels_file)}")
 
         return X, y  # torch.tensor(X), torch.tensor(y)
 
@@ -231,7 +230,7 @@ def main() -> None:
         debugging=False,
     )
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=123
+        X, y, test_size=config.global_config.test_split_fraction, shuffle=False
     )
 
     train_ds = PictureDataset(X_train, y_train)

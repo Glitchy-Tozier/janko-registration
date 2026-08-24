@@ -34,6 +34,7 @@ def get_datetime_str() -> str:
 class GlobalConfig:
     synthetic_data_dir: Path
     synthetic_resolution: tuple[int, int]
+    test_split_fraction: float
     model_dir: Path
 
 
@@ -74,6 +75,7 @@ class Config:
 
         self.global_config = GlobalConfig(
             synthetic_data_dir=Path(global_cfg["synthetic_data_dir"]),
+            test_split_fraction=float(global_cfg["test_split_fraction"]),
             synthetic_resolution=tuple(global_cfg["synthetic_resolution"]),
             model_dir=Path(global_cfg["model_dir"]),
         )
