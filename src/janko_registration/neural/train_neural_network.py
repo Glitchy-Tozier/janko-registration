@@ -69,7 +69,7 @@ class PictureDataset(Dataset):
                     print("█", end="", flush=True)
 
                 if (idx + 1) % 100 == 0:
-                    print(f" Loaded {idx + 1}/{len(y)}")
+                    print(f" Loaded {idx + 1}/{desired_img_count}")
 
         return X, y  # torch.tensor(X), torch.tensor(y)
 
