@@ -44,3 +44,11 @@ janko_registration/
 ```
 
 `janko_piano_base.py` remains the source of truth for the Jankó piano geometry. Its geometry will be exported into a canonical representation that can be used both for synthetic data generation and for final image overlays.
+
+## Usage
+
+```sh
+uv run python -m janko_registration.synth.generate --seed 42 --count 1000
+
+uv run python -m janko_registration.neural.train_neural_network --data_count -1 --epochs 20 # train the model with all data there is
+```
