@@ -237,10 +237,7 @@ def load_backgrounds(
         if image_path.suffix.lower() not in supported_extensions:
             continue
 
-        image = cv2.imread(
-            str(image_path),
-            cv2.IMREAD_COLOR,
-        )
+        image = cv2.imread(image_path)
 
         if image is None:
             print(f"Warning: could not read {image_path}")

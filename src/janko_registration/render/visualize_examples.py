@@ -48,10 +48,7 @@ def load_synthetic_data(
         image_name = data["image_loc"]
         image_path = source_dir / image_name
 
-        image: np.ndarray = cv2.imread(
-            str(image_path),
-            cv2.COLOR_BGR2RGB,
-        )
+        image: np.ndarray = cv2.imread(image_path)
 
         if image is None:
             print(f"Warning: could not read {image_path}")
@@ -112,10 +109,7 @@ def load_real_pictures(
 
         data = {"image_loc": image_path.name}
 
-        image_original: np.ndarray = cv2.imread(
-            str(image_path),
-            cv2.COLOR_BGR2RGB,
-        )
+        image_original: np.ndarray = cv2.imread(image_path)
 
         if image_original is None:
             print(f"Warning: could not read {image_path}")

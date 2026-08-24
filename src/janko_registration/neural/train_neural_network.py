@@ -41,10 +41,7 @@ class PictureDataset(Dataset):
 
                 metadata = json.loads(line)
                 image_path = source_dir / metadata["image_loc"]
-                image: np.ndarray = cv2.imread(
-                    str(image_path),
-                    cv2.IMREAD_COLOR,
-                )
+                image: np.ndarray = cv2.imread(image_path)
 
                 if image is None:
                     print(f"Warning: could not read {image_path}")
