@@ -40,8 +40,7 @@ class PictureDataset(Dataset):
                     break
 
                 metadata = json.loads(line)
-                image_name = metadata["image"]
-                image_path = source_dir / image_name
+                image_path = source_dir / metadata["image_loc"]
                 image: np.ndarray = cv2.imread(
                     str(image_path),
                     cv2.IMREAD_COLOR,
@@ -68,7 +67,7 @@ class PictureDataset(Dataset):
                     print("█", end="", flush=True)
 
                 if (idx + 1) % 100 == 0:
-                    print(f" Loaded {idx + 1}/{len(labels_file)}")
+                    print(f" Loaded {idx + 1}/{desired_img_count}")
 
         return X, y  # torch.tensor(X), torch.tensor(y)
 
@@ -227,7 +226,6 @@ def main() -> None:
     X, y = PictureDataset.load_synthetic_data(
         config.global_config.synthetic_data_dir,
         args.data_count,
-        debugging=False,
     )
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=config.global_config.test_split_fraction, shuffle=False

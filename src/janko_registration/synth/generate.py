@@ -941,7 +941,7 @@ def generate_dataset(
                 raise RuntimeError(f"Could not write image to {image_path}")
 
             metadata = {
-                "image": f"images/{filename}",
+                "image_loc": f"images/{filename}",
                 "corners": target_corners.tolist(),
                 "visible_keys": visible_key_indices,
                 "homography": homography.tolist(),
