@@ -7,13 +7,29 @@ from typing import Any
 import yaml
 
 
+def format_duration(seconds: float) -> str:
+    seconds = max(0, int(seconds))
+    hours, remainder = divmod(seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+
+    if hours:
+        return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+    return f"{minutes:02d}:{seconds:02d}"
+
+
+# Config
+
+
 @dataclass
 class GlobalConfig:
+    synthetic_data_dir: Path
     synthetic_resolution: tuple[int, int]
 
 
 @dataclass
 class GeneratorConfig:
+    background_dir: Path
     base_image_width: int
     base_image_height: int
     piano_white_min_brightness: int
@@ -47,10 +63,12 @@ class Config:
         generator_cfg = data["generator"]
 
         self.global_config = GlobalConfig(
+            synthetic_data_dir=Path(global_cfg["synthetic_data_dir"]),
             synthetic_resolution=tuple(global_cfg["synthetic_resolution"]),
         )
 
         self.generator = GeneratorConfig(
+            background_dir=Path(generator_cfg["background_dir"]),
             base_image_width=int(generator_cfg["base_image_width"]),
             base_image_height=int(generator_cfg["base_image_height"]),
             piano_white_min_brightness=int(generator_cfg["piano_white_min_brightness"]),

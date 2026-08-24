@@ -890,8 +890,6 @@ def generate_sample_image(
 
 
 def generate_dataset(
-    output_directory: Path,
-    background_directory: Path,
     sample_count: int,
     config: Config,
     seed: int | None = None,
@@ -899,18 +897,11 @@ def generate_dataset(
     """
     Generate and save a complete synthetic training dataset.
     """
-    output_directory.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
-
-    image_directory = output_directory / "images"
-    image_directory.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
-
-    labels_path = output_directory / "labels.jsonl"
+    background_directory = config.generator.background_dir
+    synthetic_data_dir = config.global_config.synthetic_data_dir
+    labels_path = synthetic_data_dir / "labels.jsonl"
+    image_directory = synthetic_data_dir / "images"
+    image_directory.mkdir(parents=True, exist_ok=True)
 
     random_generator = np.random.default_rng(seed)
 
@@ -977,20 +968,6 @@ def main() -> None:
     )
 
     parser.add_argument(
-        "--output",
-        type=Path,
-        default=Path("data/synthetic"),
-        help="Directory in which to store the dataset.",
-    )
-
-    parser.add_argument(
-        "--backgrounds",
-        type=Path,
-        default=Path("data/backgrounds"),
-        help="Directory containing source background images.",
-    )
-
-    parser.add_argument(
         "--seed",
         type=int,
         default=None,
@@ -1002,8 +979,6 @@ def main() -> None:
     config = Config()
 
     generate_dataset(
-        output_directory=args.output,
-        background_directory=args.backgrounds,
         sample_count=args.count,
         config=config,
         seed=args.seed,
