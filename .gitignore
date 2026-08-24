@@ -1,5 +1,6 @@
 # Files that should not be shared publicly
 data/backgrounds/
+data/models/
 data/synthetic/
 data/.storage/
 
