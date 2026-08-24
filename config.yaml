@@ -5,6 +5,7 @@ global_config:
   test_split_fraction: 0.2
 
   model_dir: "data/models"
+  real_data_dir: "data/real_pictures"
 
 generator:
   background_dir: "data/backgrounds" # Backgrounds used in generating synthetic data

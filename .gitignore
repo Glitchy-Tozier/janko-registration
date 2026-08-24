@@ -2,6 +2,8 @@
 data/backgrounds/
 data/models/
 data/synthetic/
+data/real_pictures/
+data/visualizations/
 data/.storage/
 
 # Python-generated files

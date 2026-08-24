@@ -47,8 +47,17 @@ janko_registration/
 
 ## Usage
 
+### Generate training data
 ```sh
 uv run python -m janko_registration.synth.generate --seed 42 --count 1000
+```
 
+### Train model
+```sh
 uv run python -m janko_registration.neural.train_neural_network --data_count -1 --epochs 20 # train the model with all data there is
+```
+
+### Generate example images, that visually show how good/bad the model is
+```sh
+uv run python -m janko_registration.render.visualize_examples --model_name model_260823.pth --nr_synth_examples 3 --nr_real_examples 3
 ```
