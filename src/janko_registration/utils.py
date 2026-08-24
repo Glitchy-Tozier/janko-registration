@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +19,14 @@ def format_duration(seconds: float) -> str:
     return f"{minutes:02d}:{seconds:02d}"
 
 
+def get_datetime_str() -> str:
+    now = datetime.now()  # Get current time  # noqa: DTZ005
+
+    timestamp_string = now.strftime("%y%m%d_%H%M")  # Convert to YYMMDDHHMM string
+    # print(timestamp_string)  # Output example: 2608241430
+    return timestamp_string
+
+
 # Config
 
 
@@ -25,6 +34,7 @@ def format_duration(seconds: float) -> str:
 class GlobalConfig:
     synthetic_data_dir: Path
     synthetic_resolution: tuple[int, int]
+    model_dir: Path
 
 
 @dataclass
@@ -65,6 +75,7 @@ class Config:
         self.global_config = GlobalConfig(
             synthetic_data_dir=Path(global_cfg["synthetic_data_dir"]),
             synthetic_resolution=tuple(global_cfg["synthetic_resolution"]),
+            model_dir=Path(global_cfg["model_dir"]),
         )
 
         self.generator = GeneratorConfig(

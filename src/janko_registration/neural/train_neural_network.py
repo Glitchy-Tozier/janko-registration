@@ -10,7 +10,7 @@ import torch.nn.functional as F
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, Dataset
 
-from janko_registration.utils import Config, format_duration
+from janko_registration.utils import Config, format_duration, get_datetime_str
 
 
 class PictureDataset(Dataset):
@@ -206,12 +206,6 @@ def main() -> None:
         default=30,
         help="Number of epochs.",
     )
-    parser.add_argument(
-        "--model_path",
-        type=Path,
-        default=Path("data/models/model.pth"),
-        help="Number of epochs.",
-    )
     args = parser.parse_args()
     config = Config()
 
@@ -293,8 +287,12 @@ def main() -> None:
         compute_accuracy(model, test_loader, config)
 
     # Save model
-    args.model_path.parent.mkdir(parents=True, exist_ok=True)
-    torch.save(model.state_dict(), args.model_path)
+    model_dir = config.global_config.model_dir
+    model_dir.mkdir(parents=True, exist_ok=True)
+    model_filename = f"model_{get_datetime_str()}.pth"
+    model_path = model_dir / model_filename
+    torch.save(model.state_dict(), model_path)
+    print("Saved model to", model_path)
 
 
 if __name__ == "__main__":
