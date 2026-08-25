@@ -89,7 +89,7 @@ uv run python -m janko_registration.synth.generate --seed 42 --count 1000
 ### Train the neural network
 
 ```sh
-uv run python -m janko_registration.neural.train_neural_network --data_count -1 --epochs 20
+uv run python -m janko_registration.neural.train_nn_corners --data_count -1 --epochs 20
 ```
 
 `--data_count -1` uses all available synthetic samples.
