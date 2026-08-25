@@ -14,75 +14,9 @@ from torch.utils.data import DataLoader, Dataset
 from janko_registration.utils import Config, format_duration, get_datetime_str
 
 
-class PictureDataset(Dataset):
-    @staticmethod
-    def load_synthetic_data(
-        source_dir: Path, desired_img_count: int
-    ) -> tuple[list, list]:
-        """
-        Load all images from a directory.
-
-        Images that OpenCV cannot read are skipped with a warning.
-        """
-
-        labels_path = source_dir / "labels.jsonl"
-
-        if not labels_path.exists():
-            raise RuntimeError("Asserted synthetic data directory doesn't exist.")
-
-        print("\nLoading data ...")
-        X = []
-        y = []
-
-        with labels_path.open("r", encoding="utf-8") as labels_file:
-            for idx, line in enumerate(labels_file):
-                if idx == desired_img_count:
-                    break
-
-                metadata = json.loads(line)
-                image_path = source_dir / metadata["image_loc"]
-                image: np.ndarray = cv2.imread(image_path)
-
-                if image is None:
-                    print(f"Warning: could not read {image_path}")
-                    continue
-
-                # NumPy is:
-                #   H x W x C
-                #
-                # PyTorch wants:
-                #   C x H x W
-                #
-                # So we "rotate" dimensions
-                timage = torch.from_numpy(image).permute(2, 0, 1).float() / 255.0
-                X.append(timage)
-
-                tcorners = torch.tensor(metadata["corners"], dtype=torch.float32)
-                y.append(tcorners)
-
-                if (idx + 1) % 10 == 0:
-                    print("█", end="", flush=True)
-
-                if (idx + 1) % 100 == 0:
-                    print(f" Loaded {idx + 1}/{desired_img_count}")
-
-        return X, y  # torch.tensor(X), torch.tensor(y)
-
-    def __init__(self, X, y):
-        self.features = X
-        self.labels = y
-
-    def __getitem__(self, index):
-        one_x = self.features[index]
-        one_y = self.labels[index]
-        return one_x, one_y
-
-    def __len__(self):
-        # return self.labels.shape[0]
-        return len(self.labels)
-
-
-class NeuralNetwork(torch.nn.Module):
+# This performed worst, likely due to me discarding locality with `AdaptiveAvgPool2d`.
+# Best achieved loss: ~0.200
+class NN_v1(torch.nn.Module):
     def __init__(self):
         super().__init__()
 
@@ -154,8 +88,88 @@ class NeuralNetwork(torch.nn.Module):
         return x
 
 
+# This performed best so far
+# Best achieved loss: ~0.062 on the test dataset
+class NN_v2(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+
+        self.features = torch.nn.Sequential(
+            torch.nn.Conv2d(3, 8, kernel_size=7, padding=3),  # [B, 8, 540, 960]
+            torch.nn.ReLU(),
+            torch.nn.MaxPool2d(2),  # [B, 8, 270, 480]
+            torch.nn.Conv2d(8, 16, kernel_size=7, padding=3),  # [B, 16, 270, 480]
+            torch.nn.ReLU(),
+            torch.nn.MaxPool2d(2),  # [B, 16, 135, 240]
+            torch.nn.Conv2d(16, 32, kernel_size=7, padding=3),  # [B, 32, 135, 240]
+            torch.nn.ReLU(),
+            torch.nn.MaxPool2d(2),  # [B, 32, 67, 120]
+            torch.nn.Conv2d(32, 32, kernel_size=7, padding=3),  # [B, 32, 67, 120]
+            torch.nn.ReLU(),
+        )
+
+        self.output = torch.nn.Sequential(
+            torch.nn.Flatten(),  # [B, 257280]
+            torch.nn.Linear(257280, 1024),  # [B, 1024]
+            torch.nn.ReLU(),
+            torch.nn.Linear(1024, 256),  # [B, 256]
+            torch.nn.ReLU(),
+            torch.nn.Linear(256, 64),  # [B, 64]
+            torch.nn.ReLU(),
+            torch.nn.Linear(64, 8),  # [B, 8]
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.features(x)
+        x = self.output(x)
+        return x.view(-1, 4, 2)
+
+
+# This performed only slightly better than `NN_v1`
+class NN_v3(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+
+        self.features = torch.nn.Sequential(
+            torch.nn.Conv2d(3, 16, kernel_size=7, padding=3),  # [B, 8, 540, 960]
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(16, 32, kernel_size=5, padding=2),  # [B, 16, 270, 480]
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(
+                32, 64, kernel_size=3, padding=1, stride=2
+            ),  # [B, 32, 135, 240]
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(64, 128, kernel_size=3, padding=1, stride=2),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(128, 128, kernel_size=3, padding=1, stride=2),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(128, 128, kernel_size=3, padding=1, stride=2),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(128, 128, kernel_size=3, padding=1, stride=2),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(128, 128, kernel_size=3, padding=1, stride=2),
+            torch.nn.ReLU(),
+        )
+
+        self.output = torch.nn.Sequential(
+            torch.nn.Flatten(),  # [B, 257280]
+            torch.nn.Linear(17280, 1024),  # [B, 1024]
+            torch.nn.ReLU(),
+            torch.nn.Linear(1024, 256),  # [B, 256]
+            torch.nn.ReLU(),
+            torch.nn.Linear(256, 64),  # [B, 64]
+            torch.nn.ReLU(),
+            torch.nn.Linear(64, 8),  # [B, 8]
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.features(x)
+        x = self.output(x)
+        return x.view(-1, 4, 2)
+
+
 def compute_loss_on_testset(
-    model: NeuralNetwork,
+    model: torch.nn.Module,
     dataloader: PictureDataset,
     criterion: torch.nn.L1Loss,
     config: Config,
@@ -212,7 +226,7 @@ def main() -> None:
     # ------------------------------------------------------------
 
     torch.manual_seed(123)
-    model = NeuralNetwork()
+    model = NN_v3()
     print("\nModel:")
     print(model)
 
@@ -288,7 +302,7 @@ def main() -> None:
     # Save model
     model_dir = config.global_config.model_dir
     model_dir.mkdir(parents=True, exist_ok=True)
-    model_filename = f"model_{get_datetime_str()}.pth"
+    model_filename = f"{model.__class__.__name__}_{get_datetime_str()}.pth"
     model_path = model_dir / model_filename
     torch.save(model.state_dict(), model_path)
     print("Saved model to", model_path)
