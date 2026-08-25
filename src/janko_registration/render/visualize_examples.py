@@ -9,12 +9,12 @@ import numpy as np
 import pandas as pd
 import torch
 
-from janko_registration.neural.train_neural_network import NeuralNetwork
+from janko_registration.neural.train_neural_network import NN_v1, NN_v2, NN_v3
 from janko_registration.utils import Config
 
 
 def load_synthetic_data(
-    source_dir: Path, desired_img_count: int, config: Config
+    source_dir: Path, start_idx: int, desired_img_count: int, config: Config
 ) -> pd.DataFrame:
     """
     Load all images from a directory.
@@ -33,12 +33,10 @@ def load_synthetic_data(
     with labels_path.open("r", encoding="utf-8") as labels_file:
         labels = list(labels_file)
 
-    total_synth_nr = len(labels)
-    test_synth_nr = int(total_synth_nr * config.global_config.test_split_fraction)
-    if test_synth_nr == 0:
-        desired_labels = []
-    else:
-        desired_labels = labels[-test_synth_nr:]
+    available_nr = len(labels[start_idx:])
+    desired_end_idx = start_idx + desired_img_count
+    max_possible_end_idx = start_idx + available_nr
+    desired_labels = labels[start_idx : min(desired_end_idx, max_possible_end_idx)]
 
     for idx, line in enumerate(desired_labels):
         if idx == desired_img_count:
@@ -205,6 +203,7 @@ def draw_points_on_picture(
 
 
 def save_prediction_on_picture(
+    model_filename_stem: str,
     image_name: str,
     image: np.ndarray,
     true_points: torch.Tensor | None,
@@ -233,7 +232,10 @@ def save_prediction_on_picture(
         image = draw_points_on_picture(image, true_points, blue)
     image = draw_points_on_picture(image, pred_points, green)
 
-    image_path = f"data/visualizations/{image_name.split('/')[-1]}"
+    image_path = Path(
+        f"data/visualizations/{model_filename_stem}/{image_name.split('/')[-1]}"
+    )
+    image_path.parent.mkdir(parents=True, exist_ok=True)
     if cv2.imwrite(image_path, image):
         print(f"Saved image to {image_path}\n")
     else:
@@ -251,15 +253,33 @@ def main() -> None:
         help=f"Name of the model that shall be fetched from the models directory (currently '{config.global_config.model_dir}').",
     )
     parser.add_argument(
-        "--nr_synth_examples",
+        "--train_start_idx",
         type=int,
-        default=-1,
+        default=0,
+        help="Number of synthetic example images to load. Use -1 to load all.",
+    )
+    parser.add_argument(
+        "--nr_train_examples",
+        type=int,
+        default=0,
+        help="Number of synthetic example images to load. Use -1 to load all.",
+    )
+    parser.add_argument(
+        "--test_start_idx",
+        type=int,
+        default=800,
+        help="Number of synthetic example images to load. Use -1 to load all.",
+    )
+    parser.add_argument(
+        "--nr_test_examples",
+        type=int,
+        default=0,
         help="Number of synthetic example images to load. Use -1 to load all.",
     )
     parser.add_argument(
         "--nr_real_examples",
         type=int,
-        default=-1,
+        default=0,
         help="Number of real example images to load. Use -1 to load all.",
     )
     args = parser.parse_args()
@@ -268,11 +288,20 @@ def main() -> None:
     # Prepare synthetic dataset
     # ------------------------------------------------------------
 
-    df_synth = load_synthetic_data(
+    df_train = load_synthetic_data(
         config.global_config.synthetic_data_dir,
-        args.nr_synth_examples,
+        args.train_start_idx,
+        args.nr_train_examples,
         config,
     )
+    df_test = load_synthetic_data(
+        config.global_config.synthetic_data_dir,
+        args.test_start_idx,
+        args.nr_test_examples,
+        config,
+    )
+    df_synth = pd.concat([df_train, df_test], ignore_index=True, sort=False)
+    print(df_synth.shape)
 
     # ------------------------------------------------------------
     # Prepare real dataset
@@ -289,7 +318,7 @@ def main() -> None:
     # ------------------------------------------------------------
 
     torch.manual_seed(123)
-    model = NeuralNetwork()
+    model = NN_v2()
 
     model_path = config.global_config.model_dir / args.model_name
     model.load_state_dict(torch.load(model_path, weights_only=True))
@@ -317,7 +346,12 @@ def main() -> None:
             pass
 
         save_prediction_on_picture(
-            row["image_loc"], row["image"], true_points, pred_points_sup, config
+            model_path.stem,
+            row["image_loc"],
+            row["image"],
+            true_points,
+            pred_points_sup,
+            config,
         )
 
     for _, row in df_real.iterrows():
@@ -333,6 +367,7 @@ def main() -> None:
             # print(pred, true)
             pass
         save_prediction_on_picture(
+            model_path.stem,
             row["image_loc"],
             row["image_original"],
             None,

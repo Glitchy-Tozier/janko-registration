@@ -100,8 +100,11 @@ Generate images showing the model's predicted corners against the known corners 
 
 ```sh
 uv run python -m janko_registration.render.visualize_examples \
-    --model_name model_260823.pth \
-    --nr_synth_examples 3 \
+    --model_name NN_v2_260825_1122.pth \
+    --train_start_idx 0 \
+    --nr_train_examples 3 \
+    --test_start_idx 800 \
+    --nr_test_examples 3 \
     --nr_real_examples 3
 ```
 
