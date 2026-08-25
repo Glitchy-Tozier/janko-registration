@@ -1,16 +1,12 @@
 from __future__ import annotations
 
 import argparse
-import json
 import time
-from pathlib import Path
 
-import cv2
 import numpy as np
 import torch
-from sklearn.model_selection import train_test_split
-from torch.utils.data import DataLoader, Dataset
 
+from janko_registration.neural.helpers import PictureDataset, create_dataloaders
 from janko_registration.utils import Config, format_duration, get_datetime_str
 
 
@@ -234,22 +230,8 @@ def main() -> None:
     # Prepare datasets
     # ------------------------------------------------------------
 
-    X, y = PictureDataset.load_synthetic_data(
-        config.global_config.synthetic_data_dir,
-        args.data_count,
-    )
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=config.global_config.test_split_fraction, shuffle=False
-    )
-
-    train_ds = PictureDataset(X_train, y_train)
-    test_ds = PictureDataset(X_test, y_test)
-
-    train_loader = DataLoader(
-        dataset=train_ds, batch_size=32, shuffle=True, num_workers=4, drop_last=True
-    )
-    test_loader = DataLoader(
-        dataset=test_ds, batch_size=32, shuffle=False, num_workers=4
+    train_loader, test_loader = create_dataloaders(
+        N=args.data_count, batch_size=32, config=config
     )
 
     # ------------------------------------------------------------
