@@ -9,7 +9,8 @@ import numpy as np
 import pandas as pd
 import torch
 
-from janko_registration.neural.train_neural_network import NN_v1, NN_v2, NN_v3
+from janko_registration.neural.train_nn_corners import NN_v1, NN_v2, NN_v3
+from janko_registration.neural.train_nn_heatmap import NN_v4
 from janko_registration.utils import Config
 
 
@@ -318,7 +319,7 @@ def main() -> None:
     # ------------------------------------------------------------
 
     torch.manual_seed(123)
-    model = NN_v2()
+    model = NN_v4(config)
 
     model_path = config.global_config.model_dir / args.model_name
     model.load_state_dict(torch.load(model_path, weights_only=True))
@@ -330,7 +331,8 @@ def main() -> None:
         features = row["timage"]
         labels = row["corners"]
         with torch.no_grad():
-            pred_points = model(features).squeeze(0)
+            prediction = model(features)
+        pred_points = model.model_output_to_corners(prediction, config).squeeze(0)
 
         pred_points_sup = pred_points.clone()  # scaled up
         pred_points_sup[:, 0] *= config.generator.base_image_width
@@ -341,9 +343,8 @@ def main() -> None:
         true_points_sdown[:, 0] /= config.generator.base_image_width
         true_points_sdown[:, 1] /= config.generator.base_image_height
 
-        for pred, true in zip(pred_points_sup.view([-1]), true_points.view([-1])):
-            # print(pred, true)
-            pass
+        # print(pred_points)
+        # print(true_points)
 
         save_prediction_on_picture(
             model_path.stem,
@@ -357,15 +358,13 @@ def main() -> None:
     for _, row in df_real.iterrows():
         features = row["timage"]
         with torch.no_grad():
-            pred_points = model(features).squeeze(0)
+            prediction = model(features)
+        pred_points = model.model_output_to_corners(prediction, config).squeeze(0)
 
         pred_points_sup = pred_points.clone()  # scaled up
         pred_points_sup[:, 0] *= config.generator.base_image_width
         pred_points_sup[:, 1] *= config.generator.base_image_height
 
-        for pred, true in zip(pred_points_sup.view([-1]), true_points.view([-1])):
-            # print(pred, true)
-            pass
         save_prediction_on_picture(
             model_path.stem,
             row["image_loc"],

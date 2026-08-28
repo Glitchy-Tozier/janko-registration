@@ -83,6 +83,10 @@ class NN_v1(torch.nn.Module):
         # print(x)
         return x
 
+    def model_output_to_corners(self, x: torch.Tensor) -> torch.Tensor:
+        """A normalizing function ensuring that every model produces the desired final metric."""
+        return x
+
 
 # This performed best so far
 # Best achieved loss: ~0.062 on the test dataset
@@ -119,6 +123,10 @@ class NN_v2(torch.nn.Module):
         x = self.features(x)
         x = self.output(x)
         return x.view(-1, 4, 2)
+
+    def model_output_to_corners(self, x: torch.Tensor) -> torch.Tensor:
+        """A normalizing function ensuring that every model produces the desired final metric."""
+        return x
 
 
 # This performed only slightly better than `NN_v1`
@@ -162,6 +170,10 @@ class NN_v3(torch.nn.Module):
         x = self.features(x)
         x = self.output(x)
         return x.view(-1, 4, 2)
+
+    def model_output_to_corners(self, x: torch.Tensor) -> torch.Tensor:
+        """A normalizing function ensuring that every model produces the desired final metric."""
+        return x
 
 
 def compute_loss_on_testset(
@@ -222,7 +234,7 @@ def main() -> None:
     # ------------------------------------------------------------
 
     torch.manual_seed(123)
-    model = NN_v3()
+    model = NN_v2()
     print("\nModel:")
     print(model)
 
@@ -260,7 +272,7 @@ def main() -> None:
 
             ### LOGGING
             elapsed = time.perf_counter() - start_time
-            completed_batches = epoch * batch_idx + batch_idx + 1
+            completed_batches = epoch * len(train_loader) + batch_idx + 1
             batches_per_second = completed_batches / elapsed
             remaining_batches = num_epochs * len(train_loader) - completed_batches
             eta = remaining_batches / batches_per_second
