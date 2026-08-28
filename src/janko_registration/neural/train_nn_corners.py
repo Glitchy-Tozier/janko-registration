@@ -234,7 +234,7 @@ def main() -> None:
     # ------------------------------------------------------------
 
     torch.manual_seed(123)
-    model = NN_v2()
+    model = NN_v2(config)
     print("\nModel:")
     print(model)
 
