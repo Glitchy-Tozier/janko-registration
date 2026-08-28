@@ -13,7 +13,7 @@ from janko_registration.utils import Config, format_duration, get_datetime_str
 # This performed worst, likely due to me discarding locality with `AdaptiveAvgPool2d`.
 # Best achieved loss: ~0.200
 class NN_v1(torch.nn.Module):
-    def __init__(self):
+    def __init__(self, config: Config):
         super().__init__()
 
         NUM_OUTPUTS = 8  # 2 x 4 coordinates
@@ -83,7 +83,7 @@ class NN_v1(torch.nn.Module):
         # print(x)
         return x
 
-    def model_output_to_corners(self, x: torch.Tensor) -> torch.Tensor:
+    def model_output_to_corners(self, x: torch.Tensor, config: Config) -> torch.Tensor:
         """A normalizing function ensuring that every model produces the desired final metric."""
         return x
 
@@ -91,7 +91,7 @@ class NN_v1(torch.nn.Module):
 # This performed best so far
 # Best achieved loss: ~0.062 on the test dataset
 class NN_v2(torch.nn.Module):
-    def __init__(self):
+    def __init__(self, config: Config):
         super().__init__()
 
         self.features = torch.nn.Sequential(
@@ -124,14 +124,14 @@ class NN_v2(torch.nn.Module):
         x = self.output(x)
         return x.view(-1, 4, 2)
 
-    def model_output_to_corners(self, x: torch.Tensor) -> torch.Tensor:
+    def model_output_to_corners(self, x: torch.Tensor, config: Config) -> torch.Tensor:
         """A normalizing function ensuring that every model produces the desired final metric."""
         return x
 
 
 # This performed only slightly better than `NN_v1`
 class NN_v3(torch.nn.Module):
-    def __init__(self):
+    def __init__(self, config: Config):
         super().__init__()
 
         self.features = torch.nn.Sequential(
@@ -171,7 +171,7 @@ class NN_v3(torch.nn.Module):
         x = self.output(x)
         return x.view(-1, 4, 2)
 
-    def model_output_to_corners(self, x: torch.Tensor) -> torch.Tensor:
+    def model_output_to_corners(self, x: torch.Tensor, config: Config) -> torch.Tensor:
         """A normalizing function ensuring that every model produces the desired final metric."""
         return x
 
