@@ -41,3 +41,11 @@ generator:
   # Opacity range for the texture/image overlaid on the piano.
   # The actual opacity varies spatially between these values.
   overlay_alpha_range: [0.0, 0.3]
+
+features:
+  show_previews: true
+
+  keep_colors: false
+  add_grayscale: false
+  add_canny: true
+  add_sobel: false

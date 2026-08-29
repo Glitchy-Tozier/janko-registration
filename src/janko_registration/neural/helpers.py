@@ -9,13 +9,61 @@ import torch
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, Dataset
 
-from janko_registration.utils import Config
+from janko_registration.utils import Config, FeaturesConfig
 
 
 class PictureDataset(Dataset):
     @staticmethod
+    def prepare_features(image: np.ndarray, features: FeaturesConfig) -> np.ndarray:
+        """
+        Remove color information or add grayscale / edge detection layers to the image.
+        Can be adapted in the global `config.yaml` file.
+        """
+        if features.keep_colors:
+            result = [image]
+        else:
+            result = []
+
+        if features.add_grayscale or features.add_canny or features.add_sobel:
+            img_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+            if features.add_grayscale:
+                result.append(img_gray[..., None])
+
+            if features.add_canny:
+                canny = cv2.Canny(img_gray, 50, 150, 5)
+                result.append(canny[..., None])
+
+            if features.add_sobel:
+                gx = cv2.Sobel(img_gray, cv2.CV_32F, 1, 0, ksize=3)
+                gy = cv2.Sobel(img_gray, cv2.CV_32F, 0, 1, ksize=3)
+
+                mag = cv2.magnitude(gx, gy)
+                mag = cv2.normalize(mag, None, 0, 1, cv2.NORM_MINMAX)
+                result.append(mag[..., None])
+
+        result = np.concatenate(result, axis=2)
+
+        if features.show_previews and (
+            features.add_grayscale or features.add_canny or features.add_sobel
+        ):
+            if not features.keep_colors:
+                cv2.imshow("original", image)
+            if features.add_grayscale:
+                cv2.imshow("grayscale", img_gray)
+            if features.add_canny:
+                cv2.imshow("canny", canny)
+            if features.add_sobel:
+                cv2.imshow("sobel", mag)
+
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+
+        return result
+
+    @staticmethod
     def load_synthetic_data(
-        source_dir: Path, desired_img_count: int
+        desired_img_count: int, config: Config
     ) -> tuple[list, list]:
         """
         Load all images from a directory.
@@ -23,6 +71,7 @@ class PictureDataset(Dataset):
         Images that OpenCV cannot read are skipped with a warning.
         """
 
+        source_dir = config.global_config.synthetic_data_dir
         labels_path = source_dir / "labels.jsonl"
 
         if not labels_path.exists():
@@ -44,6 +93,8 @@ class PictureDataset(Dataset):
                 if image is None:
                     print(f"Warning: could not read {image_path}")
                     continue
+
+                image = PictureDataset.prepare_features(image, config.features)
 
                 # NumPy is:
                 #   H x W x C
@@ -85,10 +136,7 @@ def create_dataloaders(
 ) -> tuple[DataLoader, DataLoader]:
     """A reusable way to load data, generate Datasets and create DataLoaders from them."""
     # Load data as lists
-    X, y = PictureDataset.load_synthetic_data(
-        config.global_config.synthetic_data_dir,
-        N,
-    )
+    X, y = PictureDataset.load_synthetic_data(N, config)
     # train test split
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=config.global_config.test_split_fraction, shuffle=False

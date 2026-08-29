@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import torch
 
+from janko_registration.neural.helpers import PictureDataset
 from janko_registration.neural.train_nn_corners import NN_v1, NN_v2, NN_v3
 from janko_registration.neural.train_nn_heatmap import NN_v4
 from janko_registration.utils import Config
@@ -60,7 +61,11 @@ def load_synthetic_data(
         #   C x H x W
         #
         # So we "rotate" dimensions
-        timage = torch.from_numpy(image).permute(2, 0, 1).unsqueeze(0).float() / 255.0
+        prepared_image = PictureDataset.prepare_features(image, config.features)
+        timage = (
+            torch.from_numpy(prepared_image).permute(2, 0, 1).unsqueeze(0).float()
+            / 255.0
+        )
         data["image"] = image
         data["timage"] = timage
         data["corners"] = torch.tensor(data["corners"], dtype=torch.float32)
@@ -127,8 +132,9 @@ def load_real_pictures(
         #   C x H x W
         #
         # So we "rotate" dimensions
+        prepared_image = PictureDataset.prepare_features(image_resized, config.features)
         timage = (
-            torch.from_numpy(image_resized).permute(2, 0, 1).unsqueeze(0).float()
+            torch.from_numpy(prepared_image).permute(2, 0, 1).unsqueeze(0).float()
             / 255.0
         )
         data["image_original"] = image_original
@@ -318,10 +324,12 @@ def main() -> None:
     # Load model
     # ------------------------------------------------------------
 
-    torch.manual_seed(123)
-    model = NN_v4(config)
-
     model_path = config.global_config.model_dir / args.model_name
+    model_map = {"NN_v1": NN_v1, "NN_v2": NN_v2, "NN_v3": NN_v3, "NN_v4": NN_v4}
+
+    torch.manual_seed(123)
+    model_class = model_map[args.model_name[:5]]
+    model = model_class(config)
     model.load_state_dict(torch.load(model_path, weights_only=True))
     model.eval()
     print("\nModel:")

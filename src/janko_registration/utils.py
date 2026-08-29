@@ -63,9 +63,19 @@ class GeneratorConfig:
 
 
 @dataclass
+class FeaturesConfig:
+    keep_colors: bool
+    add_grayscale: bool
+    add_canny: bool
+    add_sobel: bool
+    show_previews: bool
+
+
+@dataclass
 class Config:
     global_config: GlobalConfig
     generator: GeneratorConfig
+    features: FeaturesConfig
 
     def __init__(self, yml_path: str | Path = "config.yaml") -> None:
         with Path(yml_path).open("r", encoding="utf-8") as f:
@@ -73,6 +83,7 @@ class Config:
 
         global_cfg = data["global_config"]
         generator_cfg = data["generator"]
+        features_cfg = data["features"]
 
         self.global_config = GlobalConfig(
             synthetic_data_dir=Path(global_cfg["synthetic_data_dir"]),
@@ -102,4 +113,12 @@ class Config:
             flip_y_probability=float(generator_cfg["flip_y_probability"]),
             jpeg_probability=float(generator_cfg["jpeg_probability"]),
             overlay_alpha_range=tuple(generator_cfg["overlay_alpha_range"]),
+        )
+
+        self.features = FeaturesConfig(
+            show_previews=bool(features_cfg["show_previews"]),
+            keep_colors=bool(features_cfg["keep_colors"]),
+            add_grayscale=bool(features_cfg["add_grayscale"]),
+            add_canny=bool(features_cfg["add_canny"]),
+            add_sobel=bool(features_cfg["add_sobel"]),
         )
