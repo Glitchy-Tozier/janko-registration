@@ -34,17 +34,15 @@ class NN_v4(torch.nn.Module):
         self.input_padding = 2 * self.border
 
         self.layers = torch.nn.Sequential(
-            torch.nn.Conv2d(2, 8, kernel_size=7, padding=3),  # [B, 8, 540, 960]
+            torch.nn.Conv2d(config.features.count, 8, kernel_size=7, padding=3),
             torch.nn.ReLU(),
-            torch.nn.Conv2d(8, 16, kernel_size=7, padding=3),  # [B, 16, 270, 480]
+            torch.nn.Conv2d(8, 16, kernel_size=7, padding=3),
             torch.nn.ReLU(),
-            torch.nn.Conv2d(
-                16, 32, kernel_size=7, padding=3, stride=2
-            ),  # [B, 32, 135, 240]
+            torch.nn.Conv2d(16, 32, kernel_size=7, padding=3, stride=2),
             torch.nn.ReLU(),
-            torch.nn.Conv2d(32, 64, kernel_size=7, padding=3),  # [B, 32, 67, 120]
+            torch.nn.Conv2d(32, 64, kernel_size=7, padding=3),
             torch.nn.ReLU(),
-            torch.nn.Conv2d(64, 128, kernel_size=7, padding=3),  # [B, 32, 67, 120]
+            torch.nn.Conv2d(64, 128, kernel_size=7, padding=3),
             torch.nn.ReLU(),
             # [B, 4, 310, 520]
             # One channel per corner.

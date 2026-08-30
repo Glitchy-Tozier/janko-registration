@@ -70,6 +70,16 @@ class FeaturesConfig:
     add_sobel: bool
     show_previews: bool
 
+    @property
+    def count(self) -> int:
+        return self.keep_colors * 3 + sum(
+            (
+                self.add_grayscale,
+                self.add_canny,
+                self.add_sobel,
+            )
+        )
+
 
 @dataclass
 class HeatmapConfig:

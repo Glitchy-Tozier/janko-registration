@@ -25,40 +25,24 @@ class NN_v1(torch.nn.Module):
             # Output:
             #   batch x 32 x 180 x 320
             torch.nn.Conv2d(
-                in_channels=3,
-                out_channels=32,
-                kernel_size=3,
-                padding=1,
+                config.features.count, out_channels=32, kernel_size=3, padding=1
             ),
             torch.nn.ReLU(),
             # batch x 32 x 90 x 160
             torch.nn.MaxPool2d(kernel_size=2),
             # batch x 64 x 90 x 160
-            torch.nn.Conv2d(
-                in_channels=32,
-                out_channels=64,
-                kernel_size=3,
-                padding=1,
-            ),
+            torch.nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, padding=1),
             torch.nn.ReLU(),
             # batch x 64 x 45 x 80
             torch.nn.MaxPool2d(kernel_size=2),
             # batch x 128 x 45 x 80
-            torch.nn.Conv2d(
-                in_channels=64,
-                out_channels=128,
-                kernel_size=3,
-                padding=1,
-            ),
+            torch.nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3, padding=1),
             torch.nn.ReLU(),
             # batch x 128 x 22 x 40
             torch.nn.MaxPool2d(kernel_size=2),
             # batch x 256 x 22 x 40
             torch.nn.Conv2d(
-                in_channels=128,
-                out_channels=256,
-                kernel_size=3,
-                padding=1,
+                in_channels=128, out_channels=256, kernel_size=3, padding=1
             ),
             torch.nn.ReLU(),
             # batch x 256 x 1 x 1
@@ -95,16 +79,16 @@ class NN_v2(torch.nn.Module):
         super().__init__()
 
         self.features = torch.nn.Sequential(
-            torch.nn.Conv2d(3, 8, kernel_size=7, padding=3),  # [B, 8, 540, 960]
+            torch.nn.Conv2d(config.features.count, 8, kernel_size=7, padding=3),
             torch.nn.ReLU(),
-            torch.nn.MaxPool2d(2),  # [B, 8, 270, 480]
-            torch.nn.Conv2d(8, 16, kernel_size=7, padding=3),  # [B, 16, 270, 480]
+            torch.nn.MaxPool2d(2),
+            torch.nn.Conv2d(8, 16, kernel_size=7, padding=3),
             torch.nn.ReLU(),
-            torch.nn.MaxPool2d(2),  # [B, 16, 135, 240]
-            torch.nn.Conv2d(16, 32, kernel_size=7, padding=3),  # [B, 32, 135, 240]
+            torch.nn.MaxPool2d(2),
+            torch.nn.Conv2d(16, 32, kernel_size=7, padding=3),
             torch.nn.ReLU(),
-            torch.nn.MaxPool2d(2),  # [B, 32, 67, 120]
-            torch.nn.Conv2d(32, 32, kernel_size=7, padding=3),  # [B, 32, 67, 120]
+            torch.nn.MaxPool2d(2),
+            torch.nn.Conv2d(32, 32, kernel_size=7, padding=3),
             torch.nn.ReLU(),
         )
 
@@ -135,13 +119,11 @@ class NN_v3(torch.nn.Module):
         super().__init__()
 
         self.features = torch.nn.Sequential(
-            torch.nn.Conv2d(3, 16, kernel_size=7, padding=3),  # [B, 8, 540, 960]
+            torch.nn.Conv2d(config.features.count, 16, kernel_size=7, padding=3),
             torch.nn.ReLU(),
-            torch.nn.Conv2d(16, 32, kernel_size=5, padding=2),  # [B, 16, 270, 480]
+            torch.nn.Conv2d(16, 32, kernel_size=5, padding=2),
             torch.nn.ReLU(),
-            torch.nn.Conv2d(
-                32, 64, kernel_size=3, padding=1, stride=2
-            ),  # [B, 32, 135, 240]
+            torch.nn.Conv2d(32, 64, kernel_size=3, padding=1, stride=2),
             torch.nn.ReLU(),
             torch.nn.Conv2d(64, 128, kernel_size=3, padding=1, stride=2),
             torch.nn.ReLU(),
