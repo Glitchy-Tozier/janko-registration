@@ -38,7 +38,7 @@ class NN_v4(torch.nn.Module):
             torch.nn.ReLU(),
             torch.nn.Conv2d(8, 16, kernel_size=7, padding=3),
             torch.nn.ReLU(),
-            torch.nn.Conv2d(16, 32, kernel_size=7, padding=3, stride=2),
+            torch.nn.Conv2d(16, 32, kernel_size=7, padding=3),  # , stride=2),
             torch.nn.ReLU(),
             torch.nn.Conv2d(32, 64, kernel_size=7, padding=3),
             torch.nn.ReLU(),

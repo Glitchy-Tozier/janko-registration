@@ -87,7 +87,7 @@ class NN_v2(torch.nn.Module):
         self.features = torch.nn.Sequential(
             torch.nn.Conv2d(config.features.count, 8, kernel_size=7, padding=3),
             torch.nn.ReLU(),
-            torch.nn.MaxPool2d(2),
+            # torch.nn.MaxPool2d(2),
             torch.nn.Conv2d(8, 16, kernel_size=7, padding=3),
             torch.nn.ReLU(),
             torch.nn.MaxPool2d(2),

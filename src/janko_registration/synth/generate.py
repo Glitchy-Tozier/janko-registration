@@ -791,7 +791,7 @@ def generate_sample_image(
             image_height=config.generator.base_image_height,
         )
 
-        shows_sufficient_keys = len(visible_key_indices) >= 30
+        shows_sufficient_keys = len(visible_key_indices) >= 36  # 3 octaves
 
         even_idx_count = sum([True for v in visible_key_indices if v % 2 == 0])
         odd_idx_count = sum([True for v in visible_key_indices if v % 2 == 1])
