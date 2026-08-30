@@ -95,7 +95,10 @@ class NN_v4(torch.nn.Module):
         self, heatmap: torch.Tensor, config: Config
     ) -> torch.Tensor:
         """
-        Convert [B, 4, H+2P, W+2P] model outputs into [B, 4, 2] corners.
+        A normalizing function ensuring that every model produces the desired final metric:
+        The bounding box corners of the visible piano, in the original scale.
+
+        Converts [B, 4, H+2P, W+2P] model outputs into [B, 4, 2] corners with original scaling.
 
         The `heatmap` contains sigmoid values in [0, 1].
         """
@@ -301,8 +304,9 @@ def main() -> None:
                 reduction="batchmean",
             )
 
-            predicted_corners = model.model_output_to_corners(prediction, config)
-            l1 = F.l1_loss(predicted_corners, labels)
+            pred_corners = model.model_output_to_corners(prediction, config)
+            true_corners = labels
+            l1 = F.l1_loss(pred_corners, true_corners)
 
             optimizer.zero_grad()
             loss.backward()

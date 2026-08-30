@@ -340,26 +340,23 @@ def main() -> None:
         labels = row["corners"]
         with torch.no_grad():
             prediction = model(features)
+
         pred_points = model.model_output_to_corners(prediction, config).squeeze(0)
+        true_points = labels
 
-        pred_points_sup = pred_points.clone()  # scaled up
-        pred_points_sup[:, 0] *= config.generator.base_image_width
-        pred_points_sup[:, 1] *= config.generator.base_image_height
+        # true_points_sdown = labels.clone()  # scaled down
+        # true_points_sdown[:, 0] /= config.generator.base_image_width
+        # true_points_sdown[:, 1] /= config.generator.base_image_height
 
-        true_points = labels.clone()
-        true_points_sdown = labels.clone()  # scaled down
-        true_points_sdown[:, 0] /= config.generator.base_image_width
-        true_points_sdown[:, 1] /= config.generator.base_image_height
-
-        # print(pred_points)
-        # print(true_points)
+        print(pred_points)
+        print(true_points)
 
         save_prediction_on_picture(
             model_path.stem,
             row["image_loc"],
             row["image"],
             true_points,
-            pred_points_sup,
+            pred_points,
             config,
         )
 
@@ -369,16 +366,12 @@ def main() -> None:
             prediction = model(features)
         pred_points = model.model_output_to_corners(prediction, config).squeeze(0)
 
-        pred_points_sup = pred_points.clone()  # scaled up
-        pred_points_sup[:, 0] *= config.generator.base_image_width
-        pred_points_sup[:, 1] *= config.generator.base_image_height
-
         save_prediction_on_picture(
             model_path.stem,
             row["image_loc"],
             row["image_original"],
             None,
-            pred_points_sup,
+            pred_points,
             config,
         )
 

@@ -68,8 +68,14 @@ class NN_v1(torch.nn.Module):
         return x
 
     def model_output_to_corners(self, x: torch.Tensor, config: Config) -> torch.Tensor:
-        """A normalizing function ensuring that every model produces the desired final metric."""
-        return x
+        """
+        A normalizing function ensuring that every model produces the desired final metric:
+        The bounding box corners of the visible piano, in the original scale.
+        """
+        x_scaled_up = x.clone()  # scaled up
+        x_scaled_up[:, :, 0] *= config.generator.base_image_width
+        x_scaled_up[:, :, 1] *= config.generator.base_image_height
+        return x_scaled_up
 
 
 # This performed best so far
@@ -109,8 +115,14 @@ class NN_v2(torch.nn.Module):
         return x.view(-1, 4, 2)
 
     def model_output_to_corners(self, x: torch.Tensor, config: Config) -> torch.Tensor:
-        """A normalizing function ensuring that every model produces the desired final metric."""
-        return x
+        """
+        A normalizing function ensuring that every model produces the desired final metric:
+        The bounding box corners of the visible piano, in the original scale.
+        """
+        x_scaled_up = x.clone()  # scaled up
+        x_scaled_up[:, :, 0] *= config.generator.base_image_width
+        x_scaled_up[:, :, 1] *= config.generator.base_image_height
+        return x_scaled_up
 
 
 # This performed only slightly better than `NN_v1`
@@ -154,8 +166,64 @@ class NN_v3(torch.nn.Module):
         return x.view(-1, 4, 2)
 
     def model_output_to_corners(self, x: torch.Tensor, config: Config) -> torch.Tensor:
-        """A normalizing function ensuring that every model produces the desired final metric."""
-        return x
+        """
+        A normalizing function ensuring that every model produces the desired final metric:
+        The bounding box corners of the visible piano, in the original scale.
+        """
+        x_scaled_up = x.clone()  # scaled up
+        x_scaled_up[:, :, 0] *= config.generator.base_image_width
+        x_scaled_up[:, :, 1] *= config.generator.base_image_height
+        return x_scaled_up
+
+
+# Maybe more linear Layers are what's needed?
+class NN_v5(torch.nn.Module):
+    def __init__(self, config: Config):
+        super().__init__()
+
+        self.features = torch.nn.Sequential(
+            torch.nn.Conv2d(config.features.count, 8, kernel_size=7, padding=3),
+            torch.nn.ReLU(),
+            torch.nn.MaxPool2d(2),
+            torch.nn.Conv2d(8, 16, kernel_size=7, padding=3),
+            torch.nn.ReLU(),
+            torch.nn.MaxPool2d(2),
+            torch.nn.Conv2d(16, 32, kernel_size=7, padding=3),
+            torch.nn.ReLU(),
+            torch.nn.MaxPool2d(2),
+            torch.nn.Conv2d(32, 32, kernel_size=7, padding=3),
+            torch.nn.ReLU(),
+        )
+
+        self.output = torch.nn.Sequential(
+            torch.nn.Flatten(),  # [B, 257280]
+            torch.nn.Linear(257280, 1024),  # [B, 1024]
+            torch.nn.ReLU(),
+            torch.nn.Linear(1024, 512),  # [B, 256]
+            torch.nn.ReLU(),
+            torch.nn.Linear(512, 256),  # [B, 256] # new
+            torch.nn.ReLU(),
+            torch.nn.Linear(256, 64),  # [B, 64]
+            torch.nn.ReLU(),
+            torch.nn.Linear(64, 16),  # [B, 16] # new
+            torch.nn.ReLU(),
+            torch.nn.Linear(16, 8),  # [B, 8]
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.features(x)
+        x = self.output(x)
+        return x.view(-1, 4, 2)
+
+    def model_output_to_corners(self, x: torch.Tensor, config: Config) -> torch.Tensor:
+        """
+        A normalizing function ensuring that every model produces the desired final metric:
+        The bounding box corners of the visible piano, in the original scale.
+        """
+        x_scaled_up = x.clone()  # scaled up
+        x_scaled_up[:, :, 0] *= config.generator.base_image_width
+        x_scaled_up[:, :, 1] *= config.generator.base_image_height
+        return x_scaled_up
 
 
 def compute_loss_on_testset(
@@ -165,30 +233,21 @@ def compute_loss_on_testset(
     config: Config,
 ) -> tuple[float, float]:
     model.eval()
-    mae_1 = []
-    mae_2 = []
+    mae = []
 
     # Loop through batches of the dataset to prevent memory issues
     for idx, (features, labels) in enumerate(dataloader):
         with torch.no_grad():
-            pred_points = model(features)  # [B, 4, 2]
+            prediction = model(features)  # [B, 4, 2]
 
-        pred_points_sup = pred_points.clone()  # scaled up
-        pred_points_sup[:, :, 0] *= config.generator.base_image_width
-        pred_points_sup[:, :, 1] *= config.generator.base_image_height
+        pred_corners = model.model_output_to_corners(prediction, config)
+        true_corners = labels
 
-        true_points = labels.clone()
-        true_points_sdown = labels.clone()  # scaled down
-        true_points_sdown[:, :, 0] /= config.generator.base_image_width
-        true_points_sdown[:, :, 1] /= config.generator.base_image_height
+        mae.append(criterion(pred_corners, true_corners))  # Loss function
 
-        mae_1.append(criterion(pred_points, true_points_sdown))  # Loss function
-        mae_2.append(criterion(pred_points_sup, true_points))  # Loss function
+    print("MAE mean over test dataset:", np.mean(mae), "(in px)\n")
 
-    print("\nMAE mean over test dataset:", np.mean(mae_1), "(downscaled)")
-    print("MAE mean over test dataset:", np.mean(mae_2), "(in px)\n")
-
-    return np.mean(mae_1), np.mean(mae_2)
+    return np.mean(mae)
 
 
 def main() -> None:
@@ -240,13 +299,13 @@ def main() -> None:
     for epoch in range(num_epochs):
         model.train()
         for batch_idx, (features, labels) in enumerate(train_loader):
-            pred_points = model(features)  # [B, 4, 2]
-            true_points = labels.clone()  # .view(-1, 3, 3) # [B, 3, 3]
-            true_points[:, :, 0] /= config.generator.base_image_width
-            true_points[:, :, 1] /= config.generator.base_image_height
+            prediction = model(features)  # [B, 4, 2]
+
+            pred_corners = model.model_output_to_corners(prediction, config)
+            true_corners = labels.clone()  # .view(-1, 3, 3) # [B, 3, 3]
 
             # loss = F.mse_loss(pred_points, true_points)  # Loss function
-            loss = criterion(pred_points, true_points)
+            loss = criterion(pred_corners, true_corners)
 
             optimizer.zero_grad()
             loss.backward()
