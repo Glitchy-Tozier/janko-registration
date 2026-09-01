@@ -10,7 +10,7 @@ import pandas as pd
 import torch
 
 from janko_registration.neural.helpers import PictureDataset
-from janko_registration.neural.train_nn_corners import NN_v1, NN_v2, NN_v3
+from janko_registration.neural.train_nn_corners import NN_v1, NN_v2, NN_v3, NN_v5
 from janko_registration.neural.train_nn_heatmap import NN_v4
 from janko_registration.utils import Config
 
@@ -325,7 +325,13 @@ def main() -> None:
     # ------------------------------------------------------------
 
     model_path = config.global_config.model_dir / args.model_name
-    model_map = {"NN_v1": NN_v1, "NN_v2": NN_v2, "NN_v3": NN_v3, "NN_v4": NN_v4}
+    model_map = {
+        "NN_v1": NN_v1,
+        "NN_v2": NN_v2,
+        "NN_v3": NN_v3,
+        "NN_v4": NN_v4,
+        "NN_v5": NN_v5,
+    }
 
     torch.manual_seed(123)
     model_class = model_map[args.model_name[:5]]
