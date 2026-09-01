@@ -3,11 +3,15 @@ from __future__ import annotations
 import argparse
 import time
 
-import numpy as np
 import torch
+import torch.nn.functional as F
 
-from janko_registration.neural.helpers import PictureDataset, create_dataloaders
-from janko_registration.utils import Config, format_duration, get_datetime_str
+from janko_registration.neural.helpers import (
+    compute_corner_loss_on_dataset,
+    create_dataloaders,
+    save_model,
+)
+from janko_registration.utils import Config, format_duration
 
 
 # This performed worst, likely due to me discarding locality with `AdaptiveAvgPool2d`.
@@ -182,32 +186,30 @@ class NN_v5(torch.nn.Module):
         super().__init__()
 
         self.features = torch.nn.Sequential(
-            torch.nn.Conv2d(config.features.count, 8, kernel_size=7, padding=3),
+            torch.nn.Conv2d(config.features.count, 16, kernel_size=7, padding=3),
+            torch.nn.ReLU(),
+            # torch.nn.MaxPool2d(2),
+            torch.nn.Conv2d(8, 32, kernel_size=7, padding=3),
             torch.nn.ReLU(),
             torch.nn.MaxPool2d(2),
-            torch.nn.Conv2d(8, 16, kernel_size=7, padding=3),
+            torch.nn.Conv2d(32, 64, kernel_size=7, padding=3),
             torch.nn.ReLU(),
             torch.nn.MaxPool2d(2),
-            torch.nn.Conv2d(16, 32, kernel_size=7, padding=3),
-            torch.nn.ReLU(),
-            torch.nn.MaxPool2d(2),
-            torch.nn.Conv2d(32, 32, kernel_size=7, padding=3),
+            torch.nn.Conv2d(64, 32, kernel_size=7, padding=3),
             torch.nn.ReLU(),
         )
 
         self.output = torch.nn.Sequential(
-            torch.nn.Flatten(),  # [B, 257280]
-            torch.nn.Linear(257280, 1024),  # [B, 1024]
+            torch.nn.Flatten(),
+            torch.nn.Linear(257280, 1024),
             torch.nn.ReLU(),
-            torch.nn.Linear(1024, 512),  # [B, 256]
+            torch.nn.Linear(1024, 256),
             torch.nn.ReLU(),
-            torch.nn.Linear(512, 256),  # [B, 256] # new
+            torch.nn.Linear(256, 128),
             torch.nn.ReLU(),
-            torch.nn.Linear(256, 64),  # [B, 64]
+            torch.nn.Linear(128, 32),
             torch.nn.ReLU(),
-            torch.nn.Linear(64, 16),  # [B, 16] # new
-            torch.nn.ReLU(),
-            torch.nn.Linear(16, 8),  # [B, 8]
+            torch.nn.Linear(32, 8),
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -224,30 +226,6 @@ class NN_v5(torch.nn.Module):
         x_scaled_up[:, :, 0] *= config.generator.base_image_width
         x_scaled_up[:, :, 1] *= config.generator.base_image_height
         return x_scaled_up
-
-
-def compute_loss_on_testset(
-    model: torch.nn.Module,
-    dataloader: PictureDataset,
-    criterion: torch.nn.L1Loss,
-    config: Config,
-) -> tuple[float, float]:
-    model.eval()
-    mae = []
-
-    # Loop through batches of the dataset to prevent memory issues
-    for idx, (features, labels) in enumerate(dataloader):
-        with torch.no_grad():
-            prediction = model(features)  # [B, 4, 2]
-
-        pred_corners = model.model_output_to_corners(prediction, config)
-        true_corners = labels
-
-        mae.append(criterion(pred_corners, true_corners))  # Loss function
-
-    print("MAE mean over test dataset:", np.mean(mae), "(in px)\n")
-
-    return np.mean(mae)
 
 
 def main() -> None:
@@ -291,7 +269,7 @@ def main() -> None:
     # Train model
     # ------------------------------------------------------------
 
-    criterion = torch.nn.L1Loss()
+    criterion = torch.nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
     num_epochs = args.epochs
     start_time = time.perf_counter()
@@ -306,6 +284,8 @@ def main() -> None:
 
             # loss = F.mse_loss(pred_points, true_points)  # Loss function
             loss = criterion(pred_corners, true_corners)
+
+            l1 = F.l1_loss(pred_corners, true_corners)
 
             optimizer.zero_grad()
             loss.backward()
@@ -322,7 +302,7 @@ def main() -> None:
                 # f"\r"
                 f"Epoch: {epoch + 1:03d}/{num_epochs:03d}"
                 f" | Batch: {batch_idx + 1:03d}/{len(train_loader):03d}"
-                f" | Loss: {loss.item():.6f}"
+                f" | Loss: {loss.item():.3f} – Pixel MAE: {l1:.3f}"
                 f" | ETA: {format_duration(eta)}",
                 # end="",
                 flush=True,
@@ -332,15 +312,15 @@ def main() -> None:
         # Optional model evaluation
         # compute_loss_on_testset(model, test_loader, criterion, config)
 
-    compute_loss_on_testset(model, test_loader, criterion, config)
+    compute_corner_loss_on_dataset(
+        dataloader=test_loader,
+        model=model,
+        criterion=criterion,
+        config=config,
+    )
 
     # Save model
-    model_dir = config.global_config.model_dir
-    model_dir.mkdir(parents=True, exist_ok=True)
-    model_filename = f"{model.__class__.__name__}_{get_datetime_str()}.pth"
-    model_path = model_dir / model_filename
-    torch.save(model.state_dict(), model_path)
-    print("Saved model to", model_path)
+    save_model(model, config)
 
 
 if __name__ == "__main__":

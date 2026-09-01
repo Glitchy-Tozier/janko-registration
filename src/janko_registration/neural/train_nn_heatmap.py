@@ -7,8 +7,12 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-from janko_registration.neural.helpers import PictureDataset, create_dataloaders
-from janko_registration.utils import Config, format_duration, get_datetime_str
+from janko_registration.neural.helpers import (
+    compute_corner_loss_on_dataset,
+    create_dataloaders,
+    save_model,
+)
+from janko_registration.utils import Config, format_duration
 
 
 class NN_v4(torch.nn.Module):
@@ -205,31 +209,6 @@ def compute_heatmap_conversion_loss(
     )
 
 
-def compute_loss_on_testset(
-    model: torch.nn.Module,
-    dataloader: PictureDataset,
-    criterion: torch.nn.L1Loss,
-    config: Config,
-) -> float:
-    model.eval()
-    mae = []
-
-    # Loop through batches of the dataset to prevent memory issues
-    for idx, (features, labels) in enumerate(dataloader):
-        with torch.no_grad():
-            prediction = model(features)  # [B, 4, H+2P, W+2P]
-            pred_corners = model.model_output_to_corners(prediction, config)
-
-        loss = criterion(pred_corners, labels)
-        mae.append(loss)
-
-    mean_mae = torch.stack(mae).mean().item()
-
-    print("\nMean corner MAE over test dataset:", mean_mae, "(in px)")
-
-    return mean_mae
-
-
 def main() -> None:
     # Unfortunately my PC has an Intel graphics card.
     print("CUDA availibility:", torch.cuda.is_available())
@@ -331,17 +310,17 @@ def main() -> None:
 
         # model.eval()
         # Optional model evaluation
-        # compute_loss_on_testset(model, test_loader, criterion, config)
+        # compute_corner_loss_on_dataset(model, test_loader, criterion, config)
 
-    compute_loss_on_testset(model, test_loader, criterion, config)
+    compute_corner_loss_on_dataset(
+        dataloader=test_loader,
+        model=model,
+        criterion=criterion,
+        config=config,
+    )
 
     # Save model
-    model_dir = config.global_config.model_dir
-    model_dir.mkdir(parents=True, exist_ok=True)
-    model_filename = f"{model.__class__.__name__}_{get_datetime_str()}.pth"
-    model_path = model_dir / model_filename
-    torch.save(model.state_dict(), model_path)
-    print("Saved model to", model_path)
+    save_model(model, config)
 
 
 if __name__ == "__main__":

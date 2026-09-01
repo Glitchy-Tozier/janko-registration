@@ -8,7 +8,7 @@ import torch
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, Dataset
 
-from janko_registration.utils import Config, FeaturesConfig
+from janko_registration.utils import Config, FeaturesConfig, get_datetime_str
 
 
 class PictureDataset(Dataset):
@@ -152,3 +152,59 @@ def create_dataloaders(
     )
 
     return (train_loader, test_loader)
+
+
+def compute_corner_loss(
+    model: torch.nn.Module,
+    features: torch.Tensor,
+    labels: torch.Tensor,
+    criterion: torch.nn.L1Loss,
+    config: Config,
+) -> torch.Tensor:
+    """Calculate the pred vs true corner loss on a single batch of data."""
+    model.eval()
+
+    with torch.no_grad():
+        prediction = model(features)
+
+    pred_corners = model.model_output_to_corners(prediction, config)
+    true_corners = labels
+
+    loss = criterion(pred_corners, true_corners)
+    return loss
+
+
+def compute_corner_loss_on_dataset(
+    dataloader: PictureDataset,
+    model: torch.nn.Module,
+    criterion: torch.nn.L1Loss,
+    config: Config,
+) -> float:
+    """
+    Compute the Mean Absolute Error of the predicted vs true corners
+    over all batches of a dataset.
+    This is done using an input criterion.
+    """
+    mae = []
+
+    # Loop through batches of the dataset to prevent memory issues
+    for idx, (features, labels) in enumerate(dataloader):
+        loss = compute_corner_loss(model, features, labels, criterion, config)
+        mae.append(loss)
+
+    mean_mae = np.mean(mae)
+
+    print("\nMean corner MAE over (test?) dataset:", mean_mae, "(in px)")
+
+    return mean_mae
+
+
+def save_model(model: torch.nn.Module, config: Config) -> None:
+    """Save the model to a preconfigured path."""
+    model_dir = config.global_config.model_dir
+    model_dir.mkdir(parents=True, exist_ok=True)
+    model_filename = f"{model.__class__.__name__}_{get_datetime_str()}.pth"
+    model_path = model_dir / model_filename
+
+    torch.save(model.state_dict(), model_path)
+    print("Saved model to", model_path)
