@@ -12,7 +12,6 @@ from janko_registration.geometry.janko import (
     PianoGeometry,
     create_full_janko_geometry,
 )
-from janko_registration.piano.janko_piano_base import BLACK_INDICES
 from janko_registration.utils import Config
 
 
@@ -233,7 +232,7 @@ def load_backgrounds(
 
     backgrounds = []
 
-    for image_path in sorted(background_directory.iterdir()):
+    for idx, image_path in enumerate(sorted(background_directory.iterdir())):
         if image_path.suffix.lower() not in supported_extensions:
             continue
 
@@ -245,7 +244,60 @@ def load_backgrounds(
 
         backgrounds.append(image)
 
+        if (idx + 1) % 10 == 0:
+            print("█", end="", flush=True)
+
+        if (idx + 1) % 100 == 0:
+            print(f" Loaded {idx + 1} backgrounds")
+
+    print(end=" ", flush=True)
     return backgrounds
+
+
+def check_vertical_clipping(
+    piano_geometry: PianoGeometry,
+    homography: np.ndarray,
+    image_width: int,
+    image_height: int,
+) -> bool:
+    """
+    A function that checks whether no visible keys are cut off at the top/bottom:
+
+    Returns `true` if there is at least one "on-screen" key that is cut off.
+    Returns `false` if visible keys are only cut off at the sides of the picture.
+    """
+
+    for key_geometry in piano_geometry.keys:
+        # print("Analyzing key", key_geometry.index)
+
+        transformed_polygons = [
+            transform_points(polygon, homography) for polygon in key_geometry.polygons
+        ]
+
+        # Treat all sub-polygons as parts of the same key.
+        key_points = np.concatenate(transformed_polygons, axis=0)
+
+        min_x = key_points[:, 0].min()
+        max_x = key_points[:, 0].max()
+        min_y = key_points[:, 1].min()
+        max_y = key_points[:, 1].max()
+
+        # Check wheather the key has some horizontal overlap with the image.
+        horizontally_visible = max_x >= 0 and min_x <= image_width
+
+        if not horizontally_visible:
+            # print("Key is NOT horizontally visible → skip checking for vertical clipping")
+            continue
+
+        vertically_clipped = min_y < 0 or max_y > image_height
+
+        if vertically_clipped:
+            # print("Key is visible and vertically clipped at the top or bottom")
+            return True
+
+        # print("No vertical clipping detected for this key")
+
+    return False
 
 
 def prepare_background(
@@ -392,12 +444,11 @@ def draw_piano(
             for polygon in key.polygons
         ]
 
-        is_white = key.index % 12 not in BLACK_INDICES
         gray_value = (
             rng.integers(
                 config.generator.piano_white_min_brightness, 255, endpoint=True
             )
-            if is_white
+            if key.is_white
             else rng.integers(
                 0, config.generator.piano_black_max_brightness, endpoint=True
             )
@@ -793,12 +844,14 @@ def generate_sample_image(
 
         shows_sufficient_keys = len(visible_key_indices) >= 48  # 4 octaves
 
-        even_idx_count = sum([True for v in visible_key_indices if v % 2 == 0])
-        odd_idx_count = sum([True for v in visible_key_indices if v % 2 == 1])
-        odd_even_diff = abs(even_idx_count - odd_idx_count)
-        odd_even_diff_acceptable = odd_even_diff <= 5
+        has_vertical_clipping = check_vertical_clipping(
+            piano_geometry,
+            homography,
+            image_width=config.generator.base_image_width,
+            image_height=config.generator.base_image_height,
+        )
 
-        if shows_sufficient_keys and odd_even_diff_acceptable:
+        if shows_sufficient_keys and not has_vertical_clipping:
             # print("Found fitting image after", attempt_number, "attempts.")
             break
 
@@ -904,14 +957,10 @@ def generate_dataset(
 
     print("Creating canonical Janko geometry ...", end=" ")
     piano_geometry = create_full_janko_geometry()
-    print(
-        f" Done!\nLoading backgrounds from {background_directory} ...",
-        end=" ",
-        flush=True,
-    )
+    print("Done!\n")
 
     backgrounds = load_backgrounds(background_directory)
-    print(f"Loaded {len(backgrounds)} background(s).")
+    print(f"Loaded {len(backgrounds)} backgrounds.\n")
 
     with labels_path.open(
         "w",
