@@ -19,23 +19,27 @@ class NN_v4(torch.nn.Module):
     def __init__(self, config: Config):
         super().__init__()
 
+        UNPADDED_TO_SYNTHETIC_RES_RATIO = 1
         if (
             config.heatmap.unpadded_resolution[0]
-            != config.global_config.synthetic_resolution[0] // 2
+            != config.global_config.synthetic_resolution[0]
+            // UNPADDED_TO_SYNTHETIC_RES_RATIO
             or config.heatmap.unpadded_resolution[1]
-            != config.global_config.synthetic_resolution[1] // 2
+            != config.global_config.synthetic_resolution[1]
+            // UNPADDED_TO_SYNTHETIC_RES_RATIO
         ):
             raise ValueError(
                 f"The training data resolution currently is {config.global_config.synthetic_resolution}. "
-                f"Thus, NN_v4 currently expects a heatmap resolution of {config.heatmap.unpadded_resolution}."
+                f"Thus, {self.__class__.__name__} currently expects a heatmap resolution of {config.heatmap.unpadded_resolution}."
+                # f"Received a resolution of {}"
             )
 
         self.border = int(
             np.ceil(config.heatmap.sigma * config.heatmap.border_width_multiplier)
         )
 
-        # The input will be downsampled by 2, so pad it by 2× the heatmap border.
-        self.input_padding = 2 * self.border
+        # The input will be downsampled by 2, so pad it by 2× the heatmap border. # That was a lie, currently it isn't
+        self.input_padding = UNPADDED_TO_SYNTHETIC_RES_RATIO * self.border
 
         self.layers = torch.nn.Sequential(
             torch.nn.Conv2d(config.features.count, 8, kernel_size=7, padding=3),
