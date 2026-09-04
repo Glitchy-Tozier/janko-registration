@@ -34,26 +34,12 @@ def transform_points(
         x = x' / w'
         y = y' / w'
     """
-    homogeneous_points = np.concatenate(
-        [
-            canonical_points,
-            np.ones(
-                (len(canonical_points), 1),
-                dtype=np.float64,
-            ),
-        ],
-        axis=1,
+    transformed_points = cv2.perspectiveTransform(
+        canonical_points.reshape(-1, 1, 2),
+        homography,
     )
 
-    transformed_homogeneous_points = homogeneous_points @ homography.T
-
-    # Every transformed point now has the form (x', y', w').
-    # Dividing by w' converts homogeneous coordinates back to (x, y).
-    normalized_points = (
-        transformed_homogeneous_points / transformed_homogeneous_points[:, 2:3]
-    )
-
-    return normalized_points[:, :2]
+    return transformed_points.reshape(-1, 2)
 
 
 def rotation_matrix(
@@ -214,6 +200,7 @@ def make_random_homography(
 
 def load_backgrounds(
     background_directory: Path,
+    config: Config,
 ) -> list[np.ndarray]:
     """
     Load all supported background images from a directory.
@@ -242,6 +229,29 @@ def load_backgrounds(
             print(f"Warning: could not read {image_path}")
             continue
 
+        source_height, source_width = image.shape[:2]
+
+        resize_scale = max(
+            config.generator.base_image_width / source_width,
+            config.generator.base_image_height / source_height,
+        )
+
+        resized_width = max(
+            1,
+            round(source_width * resize_scale),
+        )
+
+        resized_height = max(
+            1,
+            round(source_height * resize_scale),
+        )
+
+        image = cv2.resize(
+            image,
+            (resized_width, resized_height),
+            interpolation=cv2.INTER_AREA,
+        )
+
         backgrounds.append(image)
 
         if (idx + 1) % 10 == 0:
@@ -256,7 +266,7 @@ def load_backgrounds(
 
 def check_vertical_clipping(
     piano_geometry: PianoGeometry,
-    homography: np.ndarray,
+    transformed_polygons_by_key: list[list[np.ndarray]],
     image_width: int,
     image_height: int,
 ) -> bool:
@@ -267,12 +277,11 @@ def check_vertical_clipping(
     Returns `false` if visible keys are only cut off at the sides of the picture.
     """
 
-    for key_geometry in piano_geometry.keys:
+    for key_geometry, transformed_polygons in zip(
+        piano_geometry.keys,
+        transformed_polygons_by_key,
+    ):
         # print("Analyzing key", key_geometry.index)
-
-        transformed_polygons = [
-            transform_points(polygon, homography) for polygon in key_geometry.polygons
-        ]
 
         # Treat all sub-polygons as parts of the same key.
         key_points = np.concatenate(transformed_polygons, axis=0)
@@ -306,34 +315,12 @@ def prepare_background(
     rng: np.random.Generator,
 ) -> np.ndarray:
     """
-    Resize, randomly flip and randomly crop a background to exactly fill the target image.
+    Randomly flip and crop a background to exactly fill the target image.
 
-    The source image and target image can have completely different
-    aspect ratios. We therefore scale the source until it covers the
-    entire target, then take a random crop from the result.
+    The background is already resized when it is loaded. The random crop
+    still changes the position of the background for every sample.
     """
-    source_height, source_width = source_background.shape[:2]
-
-    resize_scale = max(
-        config.generator.base_image_width / source_width,
-        config.generator.base_image_height / source_height,
-    )
-
-    resized_width = max(
-        1,
-        round(source_width * resize_scale),
-    )
-
-    resized_height = max(
-        1,
-        round(source_height * resize_scale),
-    )
-
-    resized_background = cv2.resize(
-        source_background,
-        (resized_width, resized_height),
-        interpolation=cv2.INTER_AREA,
-    )
+    resized_height, resized_width = source_background.shape[:2]
 
     # After resizing, these are the possible ranges for the
     # top-left corner of the target crop.
@@ -362,10 +349,10 @@ def prepare_background(
         )
     )
 
-    cropped_background = resized_background[
+    cropped_background = source_background[
         crop_y : crop_y + config.generator.base_image_height,
         crop_x : crop_x + config.generator.base_image_width,
-    ]
+    ].copy()
 
     # This should only happen for unusual input dimensions.
     # The resize is a final safety net.
@@ -413,7 +400,7 @@ def choose_background(
 def draw_piano(
     image: np.ndarray,
     piano_geometry: PianoGeometry,
-    homography: np.ndarray,
+    transformed_polygons_by_key: list[list[np.ndarray]],
     config: Config,
     rng: np.random.Generator,
 ) -> np.ndarray:
@@ -435,15 +422,10 @@ def draw_piano(
 
         return int(clipped_number)
 
-    for key in piano_geometry.keys:
-        transformed_polygons = [
-            transform_points(
-                polygon,
-                homography,
-            )
-            for polygon in key.polygons
-        ]
-
+    for key, transformed_polygons in zip(
+        piano_geometry.keys,
+        transformed_polygons_by_key,
+    ):
         gray_value = (
             rng.integers(
                 config.generator.piano_white_min_brightness, 255, endpoint=True
@@ -512,12 +494,6 @@ def make_spatial_alpha_map(
         interpolation=cv2.INTER_CUBIC,
     )
 
-    alpha = cv2.GaussianBlur(
-        alpha,
-        ksize=(0, 0),
-        sigmaX=max(image_width, image_height) / 30.0,
-    )
-
     return np.clip(
         alpha,
         0.0,
@@ -541,12 +517,6 @@ def apply_piano_overlay(
     overlay itself receives Gaussian blur.
     """
     height, width = image.shape[:2]
-
-    overlay = cv2.resize(
-        overlay,
-        (width, height),
-        interpolation=cv2.INTER_LINEAR,
-    )
 
     # Optionally blur the overlay.
     if rng.random() < config.generator.blur_probability:
@@ -604,19 +574,14 @@ def polygon_is_fully_visible(
 
 def key_is_fully_visible(
     key_geometry: KeyGeometry,
-    homography: np.ndarray,
+    transformed_polygons: list[np.ndarray],
     image_width: int,
     image_height: int,
 ) -> bool:
     """
     Return whether every polygon belonging to a key is fully visible.
     """
-    for polygon in key_geometry.polygons:
-        transformed_polygon = transform_points(
-            polygon,
-            homography,
-        )
-
+    for transformed_polygon in transformed_polygons:
         if not polygon_is_fully_visible(
             transformed_polygon,
             image_width,
@@ -629,8 +594,8 @@ def key_is_fully_visible(
 
 def get_visible_key_indices(
     piano_geometry: PianoGeometry,
-    octaves: int,
-    homography: np.ndarray,
+    visible_octave_span: int,
+    transformed_polygons_by_key: list[list[np.ndarray]],
     image_width: int,
     image_height: int,
 ) -> tuple[list[int], list[int]]:
@@ -643,10 +608,13 @@ def get_visible_key_indices(
 
     visible_key_geoms = [
         key_geometry
-        for key_geometry in piano_geometry.keys
+        for key_geometry, transformed_polygons in zip(
+            piano_geometry.keys,
+            transformed_polygons_by_key,
+        )
         if key_is_fully_visible(
             key_geometry,
-            homography,
+            transformed_polygons,
             image_width,
             image_height,
         )
@@ -660,7 +628,7 @@ def get_visible_key_indices(
     except ValueError:
         octaves_start_idx = 9999  # Fallback value
 
-    octaves_end_idx = octaves_start_idx + 12 * octaves
+    octaves_end_idx = octaves_start_idx + 12 * visible_octave_span
     visible_indices_octaves = [
         vkg.index
         for vkg in visible_key_geoms
@@ -860,10 +828,21 @@ def generate_sample_image(
             rng,
         )
 
+        transformed_polygons_by_key = [
+            [
+                transform_points(
+                    polygon,
+                    homography,
+                )
+                for polygon in key_geometry.polygons
+            ]
+            for key_geometry in piano_geometry.keys
+        ]
+
         visible_indices_full, visible_indices_octaves = get_visible_key_indices(
             piano_geometry,
             desired_visible_octaves,
-            homography,
+            transformed_polygons_by_key,
             image_width=config.generator.base_image_width,
             image_height=config.generator.base_image_height,
         )
@@ -874,7 +853,7 @@ def generate_sample_image(
 
         has_vertical_clipping = check_vertical_clipping(
             piano_geometry,
-            homography,
+            transformed_polygons_by_key,
             image_width=config.generator.base_image_width,
             image_height=config.generator.base_image_height,
         )
@@ -885,9 +864,8 @@ def generate_sample_image(
 
     else:
         raise RuntimeError(
-            "Could not generate a sample with at least "
-            "two fully visible keys after "
-            f"{maximum_attempts} attempts."
+            "Could not generate a sample image of appropriate"
+            f"quality keys after {maximum_attempts} attempts."
         )
 
     # ------------------------------------------------------------
@@ -907,7 +885,7 @@ def generate_sample_image(
     piano_mask = draw_piano(
         image,
         piano_geometry,
-        homography,
+        transformed_polygons_by_key,
         config,
         rng,
     )
@@ -997,7 +975,7 @@ def generate_dataset(
     piano_geometry = create_full_janko_geometry()
     print("Done!\n")
 
-    backgrounds = load_backgrounds(background_directory)
+    backgrounds = load_backgrounds(background_directory, config)
     print(f"Loaded {len(backgrounds)} backgrounds.\n")
 
     with labels_path.open(
@@ -1019,11 +997,12 @@ def generate_dataset(
                 random_generator,
             )
 
-            filename = f"{sample_index:06d}.png"
+            filename = f"{sample_index:06d}.jpg"
             image_path = image_directory / filename
             write_success = cv2.imwrite(
                 str(image_path),
                 image,
+                [cv2.IMWRITE_JPEG_QUALITY, 95],
             )
 
             if not write_success:
