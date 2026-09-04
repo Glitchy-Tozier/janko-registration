@@ -105,7 +105,9 @@ class PictureDataset(Dataset):
                 timage = torch.from_numpy(image).permute(2, 0, 1).float() / 255.0
                 X.append(timage)
 
-                tcorners = torch.tensor(metadata["corners"], dtype=torch.float32)
+                tcorners = torch.tensor(
+                    metadata[config.global_config.labels_column], dtype=torch.float32
+                )
                 y.append(tcorners)
 
                 if (idx + 1) % 10 == 0:

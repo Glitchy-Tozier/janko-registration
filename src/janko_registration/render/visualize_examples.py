@@ -68,7 +68,9 @@ def load_synthetic_data(
         )
         data["image"] = image
         data["timage"] = timage
-        data["corners"] = torch.tensor(data["corners"], dtype=torch.float32)
+        data["corners"] = torch.tensor(
+            data[config.global_config.labels_column], dtype=torch.float32
+        )
 
         rows.append(data)
 
@@ -343,7 +345,7 @@ def main() -> None:
 
     for _, row in df_synth.iterrows():
         features = row["timage"]
-        labels = row["corners"]
+        labels = row[config.global_config.labels_column]
         with torch.no_grad():
             prediction = model(features)
 

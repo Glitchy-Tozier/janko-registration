@@ -629,15 +629,20 @@ def key_is_fully_visible(
 
 def get_visible_key_indices(
     piano_geometry: PianoGeometry,
+    octaves: int,
     homography: np.ndarray,
     image_width: int,
     image_height: int,
-) -> list[int]:
+) -> tuple[list[int], list[int]]:
     """
-    Return the indices of all keys that are completely visible.
+    Return the indices of...
+
+    1. all keys that are completely visible,
+    2. the keys that belong to the desired nr of octaves, starting from the left.
     """
-    return [
-        key_geometry.index
+
+    visible_key_geoms = [
+        key_geometry
         for key_geometry in piano_geometry.keys
         if key_is_fully_visible(
             key_geometry,
@@ -646,6 +651,23 @@ def get_visible_key_indices(
             image_height,
         )
     ]
+
+    visible_indices_full = [vkg.index for vkg in visible_key_geoms]
+
+    # print([vkg.key_char for vkg in visible_key_geoms])
+    try:
+        octaves_start_idx = [vkg.key_char for vkg in visible_key_geoms].index("C")
+    except ValueError:
+        octaves_start_idx = 9999  # Fallback value
+
+    octaves_end_idx = octaves_start_idx + 12 * octaves
+    visible_indices_octaves = [
+        vkg.index
+        for vkg in visible_key_geoms
+        if vkg.index >= octaves_start_idx and vkg.index < octaves_end_idx
+    ]
+
+    return visible_indices_full, visible_indices_octaves
 
 
 def get_canonical_bbox_for_keys(
@@ -809,6 +831,8 @@ def generate_sample_image(
     np.ndarray,
     list[int],
     np.ndarray,
+    list[int],
+    np.ndarray,
 ]:
     """
     Generate one synthetic image and its complete ground-truth metadata.
@@ -823,6 +847,7 @@ def generate_sample_image(
     # ------------------------------------------------------------
     # Janko Piano homography
     # ------------------------------------------------------------
+    desired_visible_octaves = 3
     maximum_attempts = 1000
 
     for attempt_number in range(
@@ -835,14 +860,17 @@ def generate_sample_image(
             rng,
         )
 
-        visible_key_indices = get_visible_key_indices(
+        visible_indices_full, visible_indices_octaves = get_visible_key_indices(
             piano_geometry,
+            desired_visible_octaves,
             homography,
             image_width=config.generator.base_image_width,
             image_height=config.generator.base_image_height,
         )
 
-        shows_sufficient_keys = len(visible_key_indices) >= 48  # 4 octaves
+        shows_sufficient_keys = (
+            len(visible_indices_octaves) >= desired_visible_octaves * 12
+        )
 
         has_vertical_clipping = check_vertical_clipping(
             piano_geometry,
@@ -909,13 +937,21 @@ def generate_sample_image(
     # Ground-truth bounding box for the visible keys.
     # ------------------------------------------------------------
 
-    canonical_visible_key_bbox = get_canonical_bbox_for_keys(
+    canonical_visible_bbox_full = get_canonical_bbox_for_keys(
         piano_geometry,
-        visible_key_indices,
+        visible_indices_full,
+    )
+    target_corners_full = transform_points(
+        canonical_visible_bbox_full,
+        homography,
     )
 
-    target_corners = transform_points(
-        canonical_visible_key_bbox,
+    canonical_visible_bbox_octaves = get_canonical_bbox_for_keys(
+        piano_geometry,
+        visible_indices_octaves,
+    )
+    target_corners_octaves = transform_points(
+        canonical_visible_bbox_octaves,
         homography,
     )
 
@@ -933,8 +969,10 @@ def generate_sample_image(
 
     return (
         image,
-        target_corners,
-        visible_key_indices,
+        target_corners_full,
+        visible_indices_full,
+        target_corners_octaves,
+        visible_indices_octaves,
         homography,
     )
 
@@ -967,13 +1005,18 @@ def generate_dataset(
         encoding="utf-8",
     ) as labels_file:
         for sample_index in range(sample_count):
-            (image, target_corners, visible_key_indices, homography) = (
-                generate_sample_image(
-                    piano_geometry,
-                    backgrounds,
-                    config,
-                    random_generator,
-                )
+            (
+                image,
+                target_corners_full,
+                visible_indices_full,
+                target_corners_octaves,
+                visible_indices_octaves,
+                homography,
+            ) = generate_sample_image(
+                piano_geometry,
+                backgrounds,
+                config,
+                random_generator,
             )
 
             filename = f"{sample_index:06d}.png"
@@ -988,8 +1031,10 @@ def generate_dataset(
 
             metadata = {
                 "image_loc": f"images/{filename}",
-                "corners": target_corners.tolist(),
-                "visible_keys": visible_key_indices,
+                "target_corners_full": target_corners_full.tolist(),
+                "visible_indices_full": visible_indices_full,
+                "target_corners_octaves": target_corners_octaves.tolist(),
+                "visible_indices_octaves": visible_indices_octaves,
                 "homography": homography.tolist(),
             }
 

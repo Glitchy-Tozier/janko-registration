@@ -16,6 +16,7 @@ class KeyGeometry:
     """Geometric representation of one Janko key in canonical coordinates."""
 
     index: int
+    key_char: str
     is_white: bool
     polygons: list[np.ndarray]
 
@@ -183,6 +184,7 @@ def extract_piano_geometry(
         key_geometries.append(
             KeyGeometry(
                 index=key.full_piano_idx,
+                key_char=key.sharp_label,
                 is_white=key.is_white,
                 polygons=polygons,
             )
