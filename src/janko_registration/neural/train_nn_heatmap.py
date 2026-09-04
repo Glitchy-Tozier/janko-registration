@@ -261,69 +261,63 @@ def main() -> None:
     num_epochs = args.epochs
     start_time = time.perf_counter()
 
-    for epoch in range(num_epochs):
-        model.train()
-        for batch_idx, (features, labels) in enumerate(train_loader):
-            prediction = model(features)  # [B, 4, H+2P, W+2P]
+    try:
+        for epoch in range(num_epochs):
+            model.train()
+            for batch_idx, (features, labels) in enumerate(train_loader):
+                prediction = model(features)  # [B, 4, H+2P, W+2P]
 
-            true_heatmap = corners_to_heatmap(labels, config)
+                true_heatmap = corners_to_heatmap(labels, config)
 
-            # Normalize both heatmaps into spatial probability distributions.
-            prediction_probs = prediction.flatten(2)
-            prediction_probs = prediction_probs / prediction_probs.sum(
-                dim=2,
-                keepdim=True,
-            ).clamp_min(1e-8)
+                # Normalize both heatmaps into spatial probability distributions.
+                prediction_probs = prediction.flatten(2)
+                prediction_probs = prediction_probs / prediction_probs.sum(
+                    dim=2,
+                    keepdim=True,
+                ).clamp_min(1e-8)
 
-            target_probs = true_heatmap.flatten(2)
-            target_probs = target_probs / target_probs.sum(
-                dim=2,
-                keepdim=True,
-            ).clamp_min(1e-8)
+                target_probs = true_heatmap.flatten(2)
+                target_probs = target_probs / target_probs.sum(
+                    dim=2,
+                    keepdim=True,
+                ).clamp_min(1e-8)
 
-            loss = F.kl_div(
-                prediction_probs.clamp_min(1e-8).log(),
-                target_probs,
-                reduction="batchmean",
-            )
+                loss = F.kl_div(
+                    prediction_probs.clamp_min(1e-8).log(),
+                    target_probs,
+                    reduction="batchmean",
+                )
 
-            pred_corners = model.model_output_to_corners(prediction, config)
-            true_corners = labels
-            l1 = F.l1_loss(pred_corners, true_corners)
+                pred_corners = model.model_output_to_corners(prediction, config)
+                true_corners = labels
+                l1 = F.l1_loss(pred_corners, true_corners)
 
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
 
-            ### LOGGING
-            elapsed = time.perf_counter() - start_time
-            completed_batches = epoch * len(train_loader) + batch_idx + 1
-            batches_per_second = completed_batches / elapsed
-            remaining_batches = num_epochs * len(train_loader) - completed_batches
-            eta = remaining_batches / batches_per_second
+                ### LOGGING
+                elapsed = time.perf_counter() - start_time
+                completed_batches = epoch * len(train_loader) + batch_idx + 1
+                batches_per_second = completed_batches / elapsed
+                remaining_batches = num_epochs * len(train_loader) - completed_batches
+                eta = remaining_batches / batches_per_second
 
-            print(
-                # f"\r"
-                f"Epoch: {epoch + 1:03d}/{num_epochs:03d}"
-                f" | Batch: {batch_idx + 1:03d}/{len(train_loader):03d}"
-                f" | Loss: {loss.item():.3f} – Pixel MAE: {l1:.3f}"
-                f" | ETA: {format_duration(eta)}",
-                # end="",
-                flush=True,
-            )
+                print(
+                    # f"\r"
+                    f"Epoch: {epoch + 1:03d}/{num_epochs:03d}"
+                    f" | Batch: {batch_idx + 1:03d}/{len(train_loader):03d}"
+                    f" | Loss: {loss.item():.3f} – Pixel MAE: {l1:.3f}"
+                    f" | ETA: {format_duration(eta)}",
+                    # end="",
+                    flush=True,
+                )
 
-        # model.eval()
-        # Optional model evaluation
-        # compute_corner_loss_on_dataset(model, test_loader, criterion, config)
+    except KeyboardInterrupt:
+        compute_corner_loss_on_dataset(test_loader, model, criterion, config)
+        save_model(model, config)
 
-    compute_corner_loss_on_dataset(
-        dataloader=test_loader,
-        model=model,
-        criterion=criterion,
-        config=config,
-    )
-
-    # Save model
+    compute_corner_loss_on_dataset(test_loader, model, criterion, config)
     save_model(model, config)
 
 

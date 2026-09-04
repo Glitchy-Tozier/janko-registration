@@ -274,52 +274,46 @@ def main() -> None:
     num_epochs = args.epochs
     start_time = time.perf_counter()
 
-    for epoch in range(num_epochs):
-        model.train()
-        for batch_idx, (features, labels) in enumerate(train_loader):
-            prediction = model(features)  # [B, 4, 2]
+    try:
+        for epoch in range(num_epochs):
+            model.train()
+            for batch_idx, (features, labels) in enumerate(train_loader):
+                prediction = model(features)  # [B, 4, 2]
 
-            pred_corners = model.model_output_to_corners(prediction, config)
-            true_corners = labels.clone()  # .view(-1, 3, 3) # [B, 3, 3]
+                pred_corners = model.model_output_to_corners(prediction, config)
+                true_corners = labels.clone()  # .view(-1, 3, 3) # [B, 3, 3]
 
-            # loss = F.mse_loss(pred_points, true_points)  # Loss function
-            loss = criterion(pred_corners, true_corners)
+                # loss = F.mse_loss(pred_points, true_points)  # Loss function
+                loss = criterion(pred_corners, true_corners)
 
-            l1 = F.l1_loss(pred_corners, true_corners)
+                l1 = F.l1_loss(pred_corners, true_corners)
 
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
 
-            ### LOGGING
-            elapsed = time.perf_counter() - start_time
-            completed_batches = epoch * len(train_loader) + batch_idx + 1
-            batches_per_second = completed_batches / elapsed
-            remaining_batches = num_epochs * len(train_loader) - completed_batches
-            eta = remaining_batches / batches_per_second
+                ### LOGGING
+                elapsed = time.perf_counter() - start_time
+                completed_batches = epoch * len(train_loader) + batch_idx + 1
+                batches_per_second = completed_batches / elapsed
+                remaining_batches = num_epochs * len(train_loader) - completed_batches
+                eta = remaining_batches / batches_per_second
 
-            print(
-                # f"\r"
-                f"Epoch: {epoch + 1:03d}/{num_epochs:03d}"
-                f" | Batch: {batch_idx + 1:03d}/{len(train_loader):03d}"
-                f" | Loss: {loss.item():.3f} – Pixel MAE: {l1:.3f}"
-                f" | ETA: {format_duration(eta)}",
-                # end="",
-                flush=True,
-            )
+                print(
+                    # f"\r"
+                    f"Epoch: {epoch + 1:03d}/{num_epochs:03d}"
+                    f" | Batch: {batch_idx + 1:03d}/{len(train_loader):03d}"
+                    f" | Loss: {loss.item():.3f} – Pixel MAE: {l1:.3f}"
+                    f" | ETA: {format_duration(eta)}",
+                    # end="",
+                    flush=True,
+                )
 
-        # model.eval()
-        # Optional model evaluation
-        # compute_loss_on_testset(model, test_loader, criterion, config)
+    except KeyboardInterrupt:
+        compute_corner_loss_on_dataset(test_loader, model, criterion, config)
+        save_model(model, config)
 
-    compute_corner_loss_on_dataset(
-        dataloader=test_loader,
-        model=model,
-        criterion=criterion,
-        config=config,
-    )
-
-    # Save model
+    compute_corner_loss_on_dataset(test_loader, model, criterion, config)
     save_model(model, config)
 
 
