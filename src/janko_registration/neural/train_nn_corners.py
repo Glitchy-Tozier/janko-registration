@@ -14,9 +14,30 @@ from janko_registration.neural.helpers import (
 from janko_registration.utils import Config, format_duration
 
 
+class CornerModelBase(torch.nn.Module):
+    """
+    A base class to reduce redundancy and provide reoccuring methods.
+    """
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.features(x)
+        x = self.output(x)
+        return x.view(-1, 4, 2)
+
+    def model_output_to_corners(self, x: torch.Tensor, config: Config) -> torch.Tensor:
+        """
+        A normalizing function ensuring that every model produces the desired final metric:
+        The bounding box corners of the visible piano, in the original scale.
+        """
+        x_scaled_up = x.clone()
+        x_scaled_up[:, :, 0] *= config.generator.base_image_width
+        x_scaled_up[:, :, 1] *= config.generator.base_image_height
+        return x_scaled_up
+
+
 # This performed worst, likely due to me discarding locality with `AdaptiveAvgPool2d`.
 # Best achieved loss: ~0.200
-class NN_v1(torch.nn.Module):
+class NN_v1(CornerModelBase):
     def __init__(self, config: Config):
         super().__init__()
 
@@ -64,27 +85,10 @@ class NN_v1(torch.nn.Module):
             torch.nn.Linear(256, NUM_OUTPUTS),
         )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.features(x)
-        x = self.output(x)
-        x = x.view([-1, 4, 2])
-        # print(x)
-        return x
-
-    def model_output_to_corners(self, x: torch.Tensor, config: Config) -> torch.Tensor:
-        """
-        A normalizing function ensuring that every model produces the desired final metric:
-        The bounding box corners of the visible piano, in the original scale.
-        """
-        x_scaled_up = x.clone()  # scaled up
-        x_scaled_up[:, :, 0] *= config.generator.base_image_width
-        x_scaled_up[:, :, 1] *= config.generator.base_image_height
-        return x_scaled_up
-
 
 # This performed best so far
 # Best achieved loss: ~0.062 on the test dataset
-class NN_v2(torch.nn.Module):
+class NN_v2(CornerModelBase):
     def __init__(self, config: Config):
         super().__init__()
 
@@ -113,24 +117,9 @@ class NN_v2(torch.nn.Module):
             torch.nn.Linear(64, 8),  # [B, 8]
         )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.features(x)
-        x = self.output(x)
-        return x.view(-1, 4, 2)
-
-    def model_output_to_corners(self, x: torch.Tensor, config: Config) -> torch.Tensor:
-        """
-        A normalizing function ensuring that every model produces the desired final metric:
-        The bounding box corners of the visible piano, in the original scale.
-        """
-        x_scaled_up = x.clone()  # scaled up
-        x_scaled_up[:, :, 0] *= config.generator.base_image_width
-        x_scaled_up[:, :, 1] *= config.generator.base_image_height
-        return x_scaled_up
-
 
 # This performed only slightly better than `NN_v1`
-class NN_v3(torch.nn.Module):
+class NN_v3(CornerModelBase):
     def __init__(self, config: Config):
         super().__init__()
 
@@ -164,24 +153,9 @@ class NN_v3(torch.nn.Module):
             torch.nn.Linear(64, 8),  # [B, 8]
         )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.features(x)
-        x = self.output(x)
-        return x.view(-1, 4, 2)
-
-    def model_output_to_corners(self, x: torch.Tensor, config: Config) -> torch.Tensor:
-        """
-        A normalizing function ensuring that every model produces the desired final metric:
-        The bounding box corners of the visible piano, in the original scale.
-        """
-        x_scaled_up = x.clone()  # scaled up
-        x_scaled_up[:, :, 0] *= config.generator.base_image_width
-        x_scaled_up[:, :, 1] *= config.generator.base_image_height
-        return x_scaled_up
-
 
 # Maybe more linear Layers are what's needed?
-class NN_v5(torch.nn.Module):
+class NN_v5(CornerModelBase):
     def __init__(self, config: Config):
         super().__init__()
 
@@ -211,21 +185,6 @@ class NN_v5(torch.nn.Module):
             torch.nn.ReLU(),
             torch.nn.Linear(32, 8),
         )
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.features(x)
-        x = self.output(x)
-        return x.view(-1, 4, 2)
-
-    def model_output_to_corners(self, x: torch.Tensor, config: Config) -> torch.Tensor:
-        """
-        A normalizing function ensuring that every model produces the desired final metric:
-        The bounding box corners of the visible piano, in the original scale.
-        """
-        x_scaled_up = x.clone()  # scaled up
-        x_scaled_up[:, :, 0] *= config.generator.base_image_width
-        x_scaled_up[:, :, 1] *= config.generator.base_image_height
-        return x_scaled_up
 
 
 def main() -> None:
