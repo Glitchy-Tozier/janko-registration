@@ -10,6 +10,7 @@ import torch.nn.functional as F
 from janko_registration.neural.helpers import (
     compute_corner_loss_on_dataset,
     create_dataloaders,
+    get_device,
     save_model,
 )
 from janko_registration.utils import Config, format_duration
@@ -187,35 +188,49 @@ def corners_to_heatmap(
 
 
 def compute_heatmap_conversion_loss(
-    dataloader, model, iterations: int, cycles: int, config: Config
+    dataloader,
+    model,
+    iterations: int,
+    cycles: int,
+    device: torch.device,
+    config: Config,
 ):
-    print(
-        "================================================================================="
-    )
-    for i, (_, l) in enumerate(dataloader):
-        if i == cycles:
-            break
-        if i != 0:
-            print(
-                "---------------------------------------------------------------------------------"
-            )
-        criterion = torch.nn.L1Loss()
-        corners = l.clone()
-        for _ in range(iterations):
-            loss = float(criterion(l, corners))
-            print(round(loss, 3), end=" → ", flush=True)
+    print("=" * 80)
+    criterion = torch.nn.L1Loss()
 
-            heatmap = corners_to_heatmap(corners, config)
-            corners = model.model_output_to_corners(heatmap, config)
-        print(round(loss, 3))
-    print(
-        "================================================================================="
-    )
+    model.eval()
+
+    with torch.inference_mode():
+        for i, (_, l) in enumerate(dataloader):
+            if i == cycles:
+                break
+            if i != 0:
+                print("-" * 80)
+
+            initial_corners = l.to(device)
+            corners = initial_corners.clone()
+
+            for _ in range(iterations):
+                loss = criterion(initial_corners, corners)
+
+                print(round(loss.item(), 3), end=" → ", flush=True)
+
+                heatmap = corners_to_heatmap(corners, config)
+                corners = model.model_output_to_corners(heatmap, config)
+
+            print(round(loss.item(), 3))
+
+    print("=" * 80)
 
 
 def main() -> None:
-    # Unfortunately my PC has an Intel graphics card.
-    print("CUDA availibility:", torch.cuda.is_available())
+    device = get_device()
+    print("Using device:", device)
+
+    if device.type == "cuda":
+        print("GPU:", torch.cuda.get_device_name(device))
+    elif device.type == "xpu":
+        print("GPU:", torch.xpu.get_device_name(device))
 
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -238,19 +253,20 @@ def main() -> None:
     # ------------------------------------------------------------
 
     torch.manual_seed(123)
-    model = NN_v4(config)
+    model = NN_v4(config).to(device)
     print("\nModel:")
     print(model)
+    print("Model device:", next(model.parameters()).device)
 
     # ------------------------------------------------------------
     # Prepare datasets
     # ------------------------------------------------------------
 
     train_loader, test_loader = create_dataloaders(
-        N=args.data_count, batch_size=32, config=config
+        N=args.data_count, batch_size=16, config=config
     )
 
-    compute_heatmap_conversion_loss(train_loader, model, 8, 3, config)
+    compute_heatmap_conversion_loss(train_loader, model, 8, 3, device, config)
 
     # ------------------------------------------------------------
     # Train model
@@ -265,6 +281,9 @@ def main() -> None:
         for epoch in range(num_epochs):
             model.train()
             for batch_idx, (features, labels) in enumerate(train_loader):
+                features = features.to(device)
+                labels = labels.to(device)
+
                 prediction = model(features)  # [B, 4, H+2P, W+2P]
 
                 true_heatmap = corners_to_heatmap(labels, config)
@@ -313,12 +332,11 @@ def main() -> None:
                     flush=True,
                 )
 
-    except KeyboardInterrupt:
-        compute_corner_loss_on_dataset(test_loader, model, criterion, config)
+        compute_corner_loss_on_dataset(test_loader, model, criterion, device, config)
         save_model(model, config)
-
-    compute_corner_loss_on_dataset(test_loader, model, criterion, config)
-    save_model(model, config)
+    except KeyboardInterrupt:
+        compute_corner_loss_on_dataset(test_loader, model, criterion, device, config)
+        save_model(model, config)
 
 
 if __name__ == "__main__":

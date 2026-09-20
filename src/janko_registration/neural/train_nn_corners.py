@@ -9,6 +9,7 @@ import torch.nn.functional as F
 from janko_registration.neural.helpers import (
     compute_corner_loss_on_dataset,
     create_dataloaders,
+    get_device,
     save_model,
 )
 from janko_registration.utils import Config, format_duration
@@ -188,8 +189,13 @@ class NN_v5(CornerModelBase):
 
 
 def main() -> None:
-    # Unfortunately my PC has an Intel graphics card.
-    print("CUDA availibility:", torch.cuda.is_available())
+    device = get_device()
+    print("Using device:", device)
+
+    if device.type == "cuda":
+        print("GPU:", torch.cuda.get_device_name(device))
+    elif device.type == "xpu":
+        print("GPU:", torch.xpu.get_device_name(device))
 
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -212,9 +218,10 @@ def main() -> None:
     # ------------------------------------------------------------
 
     torch.manual_seed(123)
-    model = NN_v2(config)
+    model = NN_v2(config).to(device)
     print("\nModel:")
     print(model)
+    print("Model device:", next(model.parameters()).device)
 
     # ------------------------------------------------------------
     # Prepare datasets
@@ -237,6 +244,9 @@ def main() -> None:
         for epoch in range(num_epochs):
             model.train()
             for batch_idx, (features, labels) in enumerate(train_loader):
+                features = features.to(device)
+                labels = labels.to(device)
+
                 prediction = model(features)  # [B, 4, 2]
 
                 pred_corners = model.model_output_to_corners(prediction, config)
@@ -268,12 +278,11 @@ def main() -> None:
                     flush=True,
                 )
 
-    except KeyboardInterrupt:
-        compute_corner_loss_on_dataset(test_loader, model, criterion, config)
+        compute_corner_loss_on_dataset(test_loader, model, criterion, device, config)
         save_model(model, config)
-
-    compute_corner_loss_on_dataset(test_loader, model, criterion, config)
-    save_model(model, config)
+    except KeyboardInterrupt:
+        compute_corner_loss_on_dataset(test_loader, model, criterion, device, config)
+        save_model(model, config)
 
 
 if __name__ == "__main__":

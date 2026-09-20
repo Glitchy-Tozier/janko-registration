@@ -11,6 +11,16 @@ from torch.utils.data import DataLoader, Dataset
 from janko_registration.utils import Config, FeaturesConfig, get_datetime_str
 
 
+def get_device() -> torch.device:
+    # return torch.device("cpu")
+
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    if torch.xpu.is_available():
+        return torch.device("xpu")
+    return torch.device("cpu")
+
+
 class PictureDataset(Dataset):
     @staticmethod
     def prepare_features(image: np.ndarray, features: FeaturesConfig) -> np.ndarray:
@@ -187,6 +197,7 @@ def compute_corner_loss_on_dataset(
     dataloader: PictureDataset,
     model: torch.nn.Module,
     criterion: torch.nn.L1Loss,
+    device: torch.device,
     config: Config,
 ) -> float:
     """
@@ -196,10 +207,16 @@ def compute_corner_loss_on_dataset(
     """
     mae = []
 
+    print("\nCalculating corner loss ...")
+
     # Loop through batches of the dataset to prevent memory issues
     for idx, (features, labels) in enumerate(dataloader):
+        print("█", end="", flush=True)
+        features = features.to(device)
+        labels = labels.to(device)
+
         loss = compute_corner_loss(model, features, labels, criterion, config)
-        mae.append(loss)
+        mae.append(loss.item())
 
     mean_mae = np.mean(mae)
 
