@@ -147,10 +147,17 @@ def create_dataloaders(
     test_ds = PictureDataset(X_test, y_test)
     # Create DataLoaders
     train_loader = DataLoader(
-        dataset=train_ds, batch_size=32, shuffle=True, num_workers=4, drop_last=True
+        dataset=train_ds,
+        batch_size=batch_size,
+        shuffle=True,
+        num_workers=1,
+        drop_last=True,
     )
     test_loader = DataLoader(
-        dataset=test_ds, batch_size=32, shuffle=False, num_workers=4
+        dataset=test_ds,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=1,
     )
 
     return (train_loader, test_loader)
