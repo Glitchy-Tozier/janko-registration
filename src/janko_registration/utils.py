@@ -20,7 +20,8 @@ def format_duration(seconds: float) -> str:
 
 
 def get_datetime_str() -> str:
-    now = datetime.now()  # Get current time  # noqa: DTZ005
+    """Returns a string representation of the current datetime."""
+    now = datetime.now()  # Get current time
 
     timestamp_string = now.strftime("%y%m%d_%H%M")  # Convert to YYMMDDHHMM string
     # print(timestamp_string)  # Output example: 2608241430
