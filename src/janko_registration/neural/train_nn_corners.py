@@ -109,7 +109,7 @@ class NN_v2(CornerModelBase):
 
         self.output = torch.nn.Sequential(
             torch.nn.Flatten(),  # [B, 257280]
-            torch.nn.Linear(257280, 1024),  # [B, 1024]
+            torch.nn.LazyLinear(1024),  # [B, 1024]
             torch.nn.ReLU(),
             torch.nn.Linear(1024, 256),  # [B, 256]
             torch.nn.ReLU(),
