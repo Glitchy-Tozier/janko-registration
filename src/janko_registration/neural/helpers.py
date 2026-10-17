@@ -173,52 +173,39 @@ def create_dataloaders(
     return (train_loader, test_loader)
 
 
-def compute_corner_loss(
-    model: torch.nn.Module,
-    features: torch.Tensor,
-    labels: torch.Tensor,
-    criterion: torch.nn.L1Loss,
-    config: Config,
-) -> torch.Tensor:
-    """Calculate the pred vs true corner loss on a single batch of data."""
-    model.eval()
-
-    with torch.no_grad():
-        prediction = model(features)
-
-    pred_corners = model.model_output_to_corners(prediction, config)
-    true_corners = labels
-
-    loss = criterion(pred_corners, true_corners)
-    return loss
-
-
 def compute_corner_loss_on_dataset(
-    dataloader: PictureDataset,
+    dataloader: DataLoader,
     model: torch.nn.Module,
-    criterion: torch.nn.L1Loss,
     device: torch.device,
     config: Config,
 ) -> float:
-    """
-    Compute the Mean Absolute Error of the predicted vs true corners
-    over all batches of a dataset.
-    This is done using an input criterion.
-    """
-    mae = []
+    """Calculate mean absolute corner-coordinate error in pixels."""
 
-    print("\nCalculating corner loss ...")
+    model.eval()
+    # `reduction="sum"` is to integrate batch size
+    criterion = torch.nn.L1Loss(reduction="sum")
 
-    # Loop through batches of the dataset to prevent memory issues
-    for idx, (features, labels) in enumerate(dataloader):
-        print("█", end="", flush=True)
-        features = features.to(device)
-        labels = labels.to(device)
+    total_absolute_error = 0.0
+    total_coordinates = 0
 
-        loss = compute_corner_loss(model, features, labels, criterion, config)
-        mae.append(loss.item())
+    print("\nCalculating corner MAE ...")
 
-    mean_mae = np.mean(mae)
+    with torch.inference_mode():
+        for features, labels in dataloader:
+            print("█", end="", flush=True)
+            features = features.to(device)
+            labels = labels.to(device)
+
+            prediction = model(features)
+            pred_corners = model.model_output_to_corners(prediction, config)
+
+            total_absolute_error += criterion(labels, pred_corners).item()
+            total_coordinates += labels.numel()
+
+    if total_coordinates == 0:
+        raise ValueError("Cannot calculate corner MAE on an empty dataset.")
+
+    mean_mae = round(total_absolute_error / total_coordinates, 2)
 
     print("\nMean corner MAE over (test?) dataset:", mean_mae, "(in px)")
 

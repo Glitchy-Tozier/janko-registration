@@ -278,10 +278,10 @@ def main() -> None:
                     flush=True,
                 )
 
-        compute_corner_loss_on_dataset(test_loader, model, criterion, device, config)
+        compute_corner_loss_on_dataset(test_loader, model, device, config)
         save_model(model, config)
     except KeyboardInterrupt:
-        compute_corner_loss_on_dataset(test_loader, model, criterion, device, config)
+        compute_corner_loss_on_dataset(test_loader, model, device, config)
         save_model(model, config)
 
 
