@@ -1022,7 +1022,7 @@ def generate_dataset(
             if (sample_index + 1) % 10 == 0:
                 print("█", end="", flush=True)
 
-            if (sample_index + 1) % 100 == 0:
+            if (sample_index + 1) % 500 == 0:
                 print(f" Generated {sample_index + 1}/{sample_count}")
 
 
