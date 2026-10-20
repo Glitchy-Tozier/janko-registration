@@ -235,7 +235,8 @@ def main() -> None:
     # Train model
     # ------------------------------------------------------------
 
-    criterion = torch.nn.MSELoss()
+    # criterion = torch.nn.MSELoss()
+    criterion = torch.nn.SmoothL1Loss()
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
     num_epochs = args.epochs
     start_time = time.perf_counter()
@@ -255,10 +256,10 @@ def main() -> None:
                 pred_corners = model.model_output_to_corners(prediction, config)
                 true_corners = labels.clone()  # .view(-1, 3, 3) # [B, 3, 3]
 
-                # loss = F.mse_loss(pred_points, true_points)  # Loss function
-                loss = criterion(pred_corners, true_corners)
+                # loss = F.mse_loss(true_corners, pred_corners)  # Loss function
+                loss = criterion(true_corners, pred_corners)
 
-                l1 = F.l1_loss(pred_corners, true_corners)
+                l1 = F.l1_loss(true_corners, pred_corners)
 
                 optimizer.zero_grad()
                 loss.backward()
