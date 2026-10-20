@@ -53,7 +53,6 @@ class NN_v4(torch.nn.Module):
             torch.nn.ReLU(),
             torch.nn.Conv2d(64, 128, kernel_size=7, padding=3),
             torch.nn.ReLU(),
-            # [B, 4, 310, 520]
             # One channel per corner.
             torch.nn.Conv2d(128, 4, kernel_size=7, padding=3),
         )
@@ -276,9 +275,12 @@ def main() -> None:
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
     num_epochs = args.epochs
     start_time = time.perf_counter()
+    epoch_losses = []
+    best_epoch_loss = float("inf")
 
     try:
         for epoch in range(num_epochs):
+            print()
             model.train()
             for batch_idx, (features, labels) in enumerate(train_loader):
                 features = features.to(device)
@@ -322,21 +324,32 @@ def main() -> None:
                 remaining_batches = num_epochs * len(train_loader) - completed_batches
                 eta = remaining_batches / batches_per_second
 
-                print(
-                    # f"\r"
-                    f"Epoch: {epoch + 1:03d}/{num_epochs:03d}"
-                    f" | Batch: {batch_idx + 1:03d}/{len(train_loader):03d}"
-                    f" | Loss: {loss.item():.3f} – Pixel MAE: {l1:.3f}"
-                    f" | ETA: {format_duration(eta)}",
-                    # end="",
-                    flush=True,
-                )
+                if batch_idx % 40 == 0:
+                    print(
+                        # f"\r"
+                        f"Epoch: {epoch + 1:03d}/{num_epochs:03d}"
+                        f" | Batch: {batch_idx + 1:03d}/{len(train_loader):03d}"
+                        f" | Loss: {loss.item():.3f} – Pixel MAE: {l1:.3f}"
+                        f" | ETA: {format_duration(eta)}",
+                        # end="",
+                        flush=True,
+                    )
 
-        compute_corner_loss_on_dataset(test_loader, model, device, config)
-        save_model(model, config)
+            epoch_test_loss = compute_corner_loss_on_dataset(
+                test_loader, model, device, config
+            )
+            epoch_losses.append(epoch_test_loss)
+
+            if epoch_test_loss < best_epoch_loss - 1 and epoch_test_loss < 30:
+                best_epoch_loss = epoch_test_loss
+                save_model(model, config)
+
     except KeyboardInterrupt:
         compute_corner_loss_on_dataset(test_loader, model, device, config)
         save_model(model, config)
+
+    print("\nCorner losses across all batches:")
+    print(epoch_losses)
 
 
 if __name__ == "__main__":

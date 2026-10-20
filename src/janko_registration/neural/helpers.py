@@ -188,7 +188,7 @@ def compute_corner_loss_on_dataset(
     total_absolute_error = 0.0
     total_coordinates = 0
 
-    print("\nCalculating corner MAE ...")
+    print("Calculating corner MAE ...")
 
     with torch.inference_mode():
         for features, labels in dataloader:
@@ -220,4 +220,4 @@ def save_model(model: torch.nn.Module, config: Config) -> None:
     model_path = model_dir / model_filename
 
     torch.save(model.state_dict(), model_path)
-    print("Saved model to", model_path)
+    print("💾 Saved model to", model_path)
