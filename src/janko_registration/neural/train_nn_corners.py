@@ -272,7 +272,7 @@ def main() -> None:
                 remaining_batches = num_epochs * len(train_loader) - completed_batches
                 eta = remaining_batches / batches_per_second
 
-                if batch_idx % 40 == 0:
+                if (batch_idx + 1) % 50 == 0:
                     print(
                         # f"\r"
                         f"Epoch: {epoch + 1:03d}/{num_epochs:03d}"
