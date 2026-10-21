@@ -278,7 +278,7 @@ def save_prediction_on_picture(
     red = (0, 0, 255)
 
     # Draw predicted and actual shapes onto image (if they exist)
-    add_square = len(pred_points) <= 4
+    add_square = config.global_config.labels_count <= 4
     add_d_lines = not add_square
     if true_points is not None:
         image = draw_points_on_picture(image, true_points, blue, add_square)
