@@ -624,15 +624,19 @@ def get_visible_key_indices(
 
     # print([vkg.key_char for vkg in visible_key_geoms])
     try:
-        octaves_start_idx = [vkg.key_char for vkg in visible_key_geoms].index("C")
-    except ValueError:
-        octaves_start_idx = 9999  # Fallback value
+        c_position = next(
+            i for i, key in enumerate(visible_key_geoms) if key.key_char == "C"
+        )
+    except StopIteration:
+        return visible_indices_full, []
 
+    octaves_start_idx = visible_key_geoms[c_position].index
     octaves_end_idx = octaves_start_idx + 12 * visible_octave_span
+
     visible_indices_octaves = [
-        vkg.index
-        for vkg in visible_key_geoms
-        if vkg.index >= octaves_start_idx and vkg.index < octaves_end_idx
+        key.index
+        for key in visible_key_geoms
+        if octaves_start_idx <= key.index < octaves_end_idx
     ]
 
     return visible_indices_full, visible_indices_octaves
