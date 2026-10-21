@@ -197,7 +197,7 @@ def compute_corner_loss_on_dataset(
             labels = labels.to(device)
 
             prediction = model(features)
-            pred_corners = model.model_output_to_corners(prediction, config)
+            pred_corners = model.model_output_to_points(prediction, config)
 
             total_absolute_error += criterion(labels, pred_corners).item()
             total_coordinates += labels.numel()

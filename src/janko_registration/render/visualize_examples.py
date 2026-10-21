@@ -162,41 +162,12 @@ def draw_points_on_picture(
     image: np.ndarray,
     points: torch.Tensor,
     color: tuple[int, int, int],
+    add_square: bool,
     alpha: float = 0.35,
 ) -> np.ndarray:
     # Ensure points are integer pixel coordinates
     points = np.asarray(points).round().astype(np.int32)
 
-    # Draw onto a separate overlay
-    overlay = image.copy()
-
-    # Semi-transparent filled rectangle/quadrilateral
-    cv2.fillPoly(
-        overlay,
-        [points],
-        color=color,
-    )
-
-    # Semi-transparent boundary lines
-    cv2.polylines(
-        overlay,
-        [points],
-        isClosed=True,
-        color=color,
-        thickness=3,
-        lineType=cv2.LINE_AA,
-    )
-
-    # Blend overlay with the image
-    image = cv2.addWeighted(
-        overlay,
-        alpha,
-        image,
-        1.0 - alpha,
-        0,
-    )
-
-    # Optional: draw the predicted points themselves
     # for x, y in points:
     for point in points:
         cv2.circle(
@@ -208,6 +179,74 @@ def draw_points_on_picture(
             thickness=-1,
             lineType=cv2.LINE_AA,
         )
+
+    if add_square:
+        # Draw onto a separate overlay
+        overlay = image.copy()
+
+        # Semi-transparent filled rectangle/quadrilateral
+        cv2.fillPoly(
+            overlay,
+            [points],
+            color=color,
+        )
+
+        # Semi-transparent boundary lines
+        cv2.polylines(
+            overlay,
+            [points],
+            isClosed=True,
+            color=color,
+            thickness=3,
+            lineType=cv2.LINE_AA,
+        )
+
+        # Blend overlay with the image
+        image = cv2.addWeighted(
+            overlay,
+            alpha,
+            image,
+            1.0 - alpha,
+            0,
+        )
+
+    return image
+
+
+def add_deviation_lines(
+    image: np.ndarray,
+    true_points: torch.Tensor,
+    pred_points: torch.Tensor,
+    color: tuple[int, int, int],
+    alpha: float = 0.75,
+) -> np.ndarray:
+    # Ensure points are integer pixel coordinates
+    true_points = np.asarray(true_points).round().astype(np.int32)
+    pred_points = np.asarray(pred_points).round().astype(np.int32)
+
+    # Draw onto a separate overlay
+    overlay = image.copy()
+
+    # Semi-transparent deviation lines
+    for tp, pp in zip(true_points, pred_points):
+        cv2.line(
+            overlay,
+            tp,
+            pp,
+            color=color,
+            thickness=2,
+            lineType=cv2.LINE_AA,
+        )
+
+    # Blend overlay with the image
+    image = cv2.addWeighted(
+        overlay,
+        alpha,
+        image,
+        1.0 - alpha,
+        0,
+    )
+
     return image
 
 
@@ -236,10 +275,17 @@ def save_prediction_on_picture(
     # OpenCV uses BGR colors, not RGB.
     blue = (255, 0, 0)
     green = (0, 255, 0)
+    red = (0, 0, 255)
+
     # Draw predicted and actual shapes onto image (if they exist)
+    add_square = len(pred_points) <= 4
+    add_d_lines = not add_square
     if true_points is not None:
-        image = draw_points_on_picture(image, true_points, blue)
-    image = draw_points_on_picture(image, pred_points, green)
+        image = draw_points_on_picture(image, true_points, blue, add_square)
+    image = draw_points_on_picture(image, pred_points, green, add_square)
+
+    if add_d_lines and true_points is not None:
+        image = add_deviation_lines(image, true_points, pred_points, red)
 
     image_path = Path(
         f"data/visualizations/{model_filename_stem}/{image_name.split('/')[-1]}"
@@ -349,7 +395,7 @@ def main() -> None:
         with torch.no_grad():
             prediction = model(features)
 
-        pred_points = model.model_output_to_corners(prediction, config).squeeze(0)
+        pred_points = model.model_output_to_points(prediction, config).squeeze(0)
         true_points = labels
 
         # true_points_sdown = labels.clone()  # scaled down
@@ -372,7 +418,7 @@ def main() -> None:
         features = row["timage"]
         with torch.no_grad():
             prediction = model(features)
-        pred_points = model.model_output_to_corners(prediction, config).squeeze(0)
+        pred_points = model.model_output_to_points(prediction, config).squeeze(0)
 
         save_prediction_on_picture(
             model_path.stem,

@@ -36,6 +36,7 @@ class GlobalConfig:
     synthetic_data_dir: Path
     synthetic_resolution: tuple[int, int]
     labels_column: str
+    labels_count: int
     test_split_fraction: float
     model_dir: Path
     real_data_dir: Path
@@ -110,6 +111,7 @@ class Config:
             synthetic_data_dir=Path(global_cfg["synthetic_data_dir"]),
             test_split_fraction=float(global_cfg["test_split_fraction"]),
             labels_column=str(global_cfg["labels_column"]),
+            labels_count=int(global_cfg["labels_count"]),
             synthetic_resolution=tuple(global_cfg["synthetic_resolution"]),
             model_dir=Path(global_cfg["model_dir"]),
             real_data_dir=Path(global_cfg["real_data_dir"]),

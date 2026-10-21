@@ -20,12 +20,19 @@ class CornerModelBase(torch.nn.Module):
     A base class to reduce redundancy and provide reoccuring methods.
     """
 
+    def __init__(self, config: Config):
+        super().__init__()
+        self.num_outputs = config.global_config.labels_count * 2
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        batch_size = x.shape[0]
+
         x = self.features(x)
         x = self.output(x)
-        return x.view(-1, 4, 2)
 
-    def model_output_to_corners(self, x: torch.Tensor, config: Config) -> torch.Tensor:
+        return x.view(batch_size, -1, 2)
+
+    def model_output_to_points(self, x: torch.Tensor, config: Config) -> torch.Tensor:
         """
         A normalizing function ensuring that every model produces the desired final metric:
         The bounding box corners of the visible piano, in the original scale.
@@ -40,9 +47,7 @@ class CornerModelBase(torch.nn.Module):
 # Best achieved loss: ~0.200
 class NN_v1(CornerModelBase):
     def __init__(self, config: Config):
-        super().__init__()
-
-        NUM_OUTPUTS = 8  # 2 x 4 coordinates
+        super().__init__(config)
 
         self.features = torch.nn.Sequential(
             # Input:
@@ -83,7 +88,7 @@ class NN_v1(CornerModelBase):
             # batch x 256
             # ->
             # batch x 9
-            torch.nn.Linear(256, NUM_OUTPUTS),
+            torch.nn.Linear(256, self.num_outputs),
         )
 
 
@@ -91,7 +96,7 @@ class NN_v1(CornerModelBase):
 # Best achieved loss: ~0.062 on the test dataset
 class NN_v2(CornerModelBase):
     def __init__(self, config: Config):
-        super().__init__()
+        super().__init__(config)
 
         self.features = torch.nn.Sequential(
             torch.nn.Conv2d(config.features.count, 8, kernel_size=7, padding=3),
@@ -113,16 +118,16 @@ class NN_v2(CornerModelBase):
             torch.nn.ReLU(),
             torch.nn.Linear(1024, 256),
             torch.nn.ReLU(),
-            torch.nn.Linear(256, 64),  # [B, 64]
+            torch.nn.Linear(256, 64),
             torch.nn.ReLU(),
-            torch.nn.Linear(64, 8),  # [B, 8]
+            torch.nn.Linear(64, self.num_outputs),
         )
 
 
 # This performed only slightly better than `NN_v1`
 class NN_v3(CornerModelBase):
     def __init__(self, config: Config):
-        super().__init__()
+        super().__init__(config)
 
         self.features = torch.nn.Sequential(
             torch.nn.Conv2d(config.features.count, 16, kernel_size=7, padding=3),
@@ -144,8 +149,15 @@ class NN_v3(CornerModelBase):
         )
 
         self.output = torch.nn.Sequential(
-            torch.nn.Flatten(),  # [B, 257280]
-            torch.nn.Linear(17280, 1024),  # [B, 1024]
+            torch.nn.Flatten(),
+            torch.nn.Linear(17280, 1024),
+            torch.nn.ReLU(),
+            torch.nn.Linear(1024, 256),
+            torch.nn.ReLU(),
+            torch.nn.Linear(256, 64),
+            torch.nn.ReLU(),
+            torch.nn.Linear(64, self.num_outputs),
+        )
             torch.nn.ReLU(),
             torch.nn.Linear(1024, 256),  # [B, 256]
             torch.nn.ReLU(),
@@ -251,9 +263,9 @@ def main() -> None:
                 features = features.to(device)
                 labels = labels.to(device)
 
-                prediction = model(features)  # [B, 4, 2]
+                prediction = model(features)  # [B, X, 2]
 
-                pred_corners = model.model_output_to_corners(prediction, config)
+                pred_corners = model.model_output_to_points(prediction, config)
                 true_corners = labels.clone()
 
                 # loss = F.mse_loss(true_corners, pred_corners)  # Loss function

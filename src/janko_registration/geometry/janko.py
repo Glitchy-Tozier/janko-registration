@@ -18,6 +18,7 @@ class KeyGeometry:
     index: int
     key_char: str
     is_white: bool
+    centers: list[np.ndarray]
     polygons: list[np.ndarray]
 
 
@@ -173,6 +174,7 @@ def extract_piano_geometry(
         positioned_vmobjects,
     ):
         polygons = []
+        centers = []
 
         for submob in positioned_vmob:
             polygon = vmobject_to_polygon(
@@ -181,12 +183,17 @@ def extract_piano_geometry(
             )
             polygons.append(polygon)
 
+            center = submob.get_center()[:2].astype(np.float64)
+            # center_v2 = np.mean(polygon, axis=0) # Basically results in the same thing as center1's implementation
+            centers.append(center)
+
         key_geometries.append(
             KeyGeometry(
                 index=key.full_piano_idx,
                 key_char=key.sharp_label,
                 is_white=key.is_white,
                 polygons=polygons,
+                centers=centers,
             )
         )
 

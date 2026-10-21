@@ -20,6 +20,7 @@ class NN_v4(torch.nn.Module):
     def __init__(self, config: Config):
         super().__init__()
 
+        self.num_outputs = config.global_config.labels_count
         UNPADDED_TO_SYNTHETIC_RES_RATIO = 1
         if (
             config.heatmap.unpadded_resolution[0]
@@ -53,8 +54,8 @@ class NN_v4(torch.nn.Module):
             torch.nn.ReLU(),
             torch.nn.Conv2d(64, 128, kernel_size=7, padding=3),
             torch.nn.ReLU(),
-            # One channel per corner.
-            torch.nn.Conv2d(128, 4, kernel_size=7, padding=3),
+            # One channel per output coordinate pair
+            torch.nn.Conv2d(128, self.num_outputs, kernel_size=7, padding=3),
         )
 
         # Create gaussian kernel, used in the forward() method
@@ -93,13 +94,13 @@ class NN_v4(torch.nn.Module):
             x,
             self.gaussian_kernel,
             padding=self.border,
-            groups=4,
+            groups=self.num_outputs,
         )
 
         # [B, 4, 310, 520]
         return x
 
-    def model_output_to_corners(
+    def model_output_to_points(
         self, heatmap: torch.Tensor, config: Config
     ) -> torch.Tensor:
         """
@@ -215,7 +216,7 @@ def compute_heatmap_conversion_loss(
                 print(round(loss.item(), 3), end=" → ", flush=True)
 
                 heatmap = corners_to_heatmap(corners, config)
-                corners = model.model_output_to_corners(heatmap, config)
+                corners = model.model_output_to_points(heatmap, config)
 
             print(round(loss.item(), 3))
 

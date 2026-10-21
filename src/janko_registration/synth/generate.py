@@ -689,6 +689,35 @@ def get_canonical_bbox_for_keys(
     )
 
 
+def get_canonical_centers_for_keys(
+    piano_geometry: PianoGeometry,
+    visible_key_indices: list[int],
+) -> np.ndarray:
+    """
+    Return the centers of all keytops belonging to selected keys.
+
+    Returns an array of shape (N, 2), where N is the total number of
+    centers across the selected keys.
+
+    Centers are ordered by piano_geometry.keys, then by each key's
+    centers list.
+    """
+    selected_keys = [
+        key_geometry
+        for key_geometry in piano_geometry.keys
+        if key_geometry.index in visible_key_indices
+    ]
+
+    if not selected_keys:
+        raise ValueError("No fully visible keys.")
+
+    selected_centers = [
+        center for key_geometry in selected_keys for center in key_geometry.centers
+    ]
+
+    return np.stack(selected_centers, axis=0).astype(np.float64)
+
+
 def apply_appearance_effects(
     image: np.ndarray,
     config: Config,
@@ -803,6 +832,7 @@ def generate_sample_image(
     np.ndarray,
     list[int],
     np.ndarray,
+    np.ndarray,
     list[int],
     np.ndarray,
 ]:
@@ -810,10 +840,20 @@ def generate_sample_image(
     Generate one synthetic image and its complete ground-truth metadata.
 
     Returns:
-        image
-        four target corner points
-        indices of fully visible keys
-        homography used to place the piano
+        image:
+            Generated image.
+        target_corners_full:
+            Transformed bounding-box corners for all fully visible keys.
+        visible_indices_full:
+            Indices of all fully visible keys.
+        target_corners_octaves:
+            Transformed bounding-box corners for the selected octaves.
+        target_centers_octaves:
+            Transformed centers of the sub-key components in those octaves.
+        visible_indices_octaves:
+            Indices of keys in the selected octaves.
+        homography:
+            Transformation from canonical piano coordinates to image coordinates.
     """
 
     # ------------------------------------------------------------
@@ -937,6 +977,15 @@ def generate_sample_image(
         homography,
     )
 
+    canonical_visible_centers_octaves = get_canonical_centers_for_keys(
+        piano_geometry,
+        visible_indices_octaves,
+    )
+    target_centers_octaves = transform_points(
+        canonical_visible_centers_octaves,
+        homography,
+    )
+
     # ------------------------------------------------------------
     # Global image effects.
     # ------------------------------------------------------------
@@ -954,6 +1003,7 @@ def generate_sample_image(
         target_corners_full,
         visible_indices_full,
         target_corners_octaves,
+        target_centers_octaves,
         visible_indices_octaves,
         homography,
     )
@@ -992,6 +1042,7 @@ def generate_dataset(
                 target_corners_full,
                 visible_indices_full,
                 target_corners_octaves,
+                target_centers_octaves,
                 visible_indices_octaves,
                 homography,
             ) = generate_sample_image(
@@ -1017,6 +1068,7 @@ def generate_dataset(
                 "target_corners_full": target_corners_full.tolist(),
                 "visible_indices_full": visible_indices_full,
                 "target_corners_octaves": target_corners_octaves.tolist(),
+                "target_centers_octaves": target_centers_octaves.tolist(),
                 "visible_indices_octaves": visible_indices_octaves,
                 "homography": homography.tolist(),
             }
