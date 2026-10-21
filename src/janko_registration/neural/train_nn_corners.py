@@ -108,10 +108,10 @@ class NN_v2(CornerModelBase):
         )
 
         self.output = torch.nn.Sequential(
-            torch.nn.Flatten(),  # [B, 257280]
-            torch.nn.LazyLinear(1024),  # [B, 1024]
+            torch.nn.Flatten(),
+            torch.nn.LazyLinear(1024),
             torch.nn.ReLU(),
-            torch.nn.Linear(1024, 256),  # [B, 256]
+            torch.nn.Linear(1024, 256),
             torch.nn.ReLU(),
             torch.nn.Linear(256, 64),  # [B, 64]
             torch.nn.ReLU(),
@@ -254,7 +254,7 @@ def main() -> None:
                 prediction = model(features)  # [B, 4, 2]
 
                 pred_corners = model.model_output_to_corners(prediction, config)
-                true_corners = labels.clone()  # .view(-1, 3, 3) # [B, 3, 3]
+                true_corners = labels.clone()
 
                 # loss = F.mse_loss(true_corners, pred_corners)  # Loss function
                 loss = criterion(true_corners, pred_corners)
