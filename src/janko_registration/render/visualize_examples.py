@@ -16,7 +16,11 @@ from janko_registration.utils import Config
 
 
 def load_synthetic_data(
-    source_dir: Path, start_idx: int, desired_img_count: int, config: Config
+    source_dir: Path,
+    start_idx: int,
+    desired_img_count: int,
+    print_output: bool,
+    config: Config,
 ) -> pd.DataFrame:
     """
     Load all images from a directory.
@@ -29,7 +33,8 @@ def load_synthetic_data(
     if not labels_path.exists():
         raise RuntimeError("Asserted synthetic data directory doesn't exist.")
 
-    print("\nLoading synthetic data ...")
+    if print_output:
+        print("\nLoading synthetic data ...")
     rows = []
 
     with labels_path.open("r", encoding="utf-8") as labels_file:
@@ -74,21 +79,23 @@ def load_synthetic_data(
 
         rows.append(data)
 
-        if (idx + 1) % 10 == 0:
-            print("█", end="", flush=True)
+        if print_output:
+            if (idx + 1) % 10 == 0:
+                print("█", end="", flush=True)
 
-        if (idx + 1) % 100 == 0:
-            print(f" Loaded {idx + 1}/{desired_img_count}")
+            if (idx + 1) % 100 == 0:
+                print(f" Loaded {idx + 1}/{desired_img_count}")
 
     df = pd.DataFrame(rows)
-    print("Dataframe shape  :", df.shape)
-    print("Dataframe columns:", df.columns)
+    if print_output:
+        print("Dataframe shape  :", df.shape)
+        print("Dataframe columns:", df.columns)
 
     return df
 
 
 def load_real_pictures(
-    source_dir: Path, desired_img_count: int, config: Config
+    source_dir: Path, desired_img_count: int, print_output: bool, config: Config
 ) -> pd.DataFrame:
     """
     Load all actual images from a directory.
@@ -98,7 +105,8 @@ def load_real_pictures(
     if not source_dir.exists():
         raise RuntimeError("Asserted real data directory doesn't exist.")
 
-    print("\nLoading real data ...")
+    if print_output:
+        print("\nLoading real data ...")
     IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".webp"}
 
     image_paths = sorted(
@@ -145,15 +153,17 @@ def load_real_pictures(
 
         rows.append(data)
 
-        if (idx + 1) % 10 == 0:
-            print("█", end="", flush=True)
+        if print_output:
+            if (idx + 1) % 10 == 0:
+                print("█", end="", flush=True)
 
-        if (idx + 1) % 100 == 0:
-            print(f" Loaded {idx + 1}/{desired_img_count}")
+            if (idx + 1) % 100 == 0:
+                print(f" Loaded {idx + 1}/{desired_img_count}")
 
     df = pd.DataFrame(rows)
-    print("Dataframe shape  :", df.shape)
-    print("Dataframe columns:", df.columns)
+    if print_output:
+        print("Dataframe shape  :", df.shape)
+        print("Dataframe columns:", df.columns)
 
     return df
 
@@ -337,6 +347,11 @@ def main() -> None:
         default=0,
         help="Number of real example images to load. Use -1 to load all.",
     )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Whether additional output shall be shown.",
+    )
     args = parser.parse_args()
 
     # ------------------------------------------------------------
@@ -347,12 +362,14 @@ def main() -> None:
         config.global_config.synthetic_data_dir,
         args.train_start_idx,
         args.nr_train_examples,
+        args.verbose,
         config,
     )
     df_test = load_synthetic_data(
         config.global_config.synthetic_data_dir,
         args.test_start_idx,
         args.nr_test_examples,
+        args.verbose,
         config,
     )
     df_synth = pd.concat([df_train, df_test], ignore_index=True, sort=False)
@@ -365,6 +382,7 @@ def main() -> None:
     df_real = load_real_pictures(
         config.global_config.real_data_dir,
         args.nr_real_examples,
+        args.verbose,
         config,
     )
 
@@ -386,8 +404,9 @@ def main() -> None:
     model = model_class(config)
     model.load_state_dict(torch.load(model_path, weights_only=True))
     model.eval()
-    print("\nModel:")
-    print(model)
+    if args.verbose:
+        print("\nModel:")
+        print(model)
 
     for _, row in df_synth.iterrows():
         features = row["timage"]
@@ -402,8 +421,9 @@ def main() -> None:
         # true_points_sdown[:, 0] /= config.generator.base_image_width
         # true_points_sdown[:, 1] /= config.generator.base_image_height
 
-        print(pred_points)
-        print(true_points)
+        if args.verbose:
+            print(pred_points)
+            print(true_points)
 
         save_prediction_on_picture(
             model_path.stem,

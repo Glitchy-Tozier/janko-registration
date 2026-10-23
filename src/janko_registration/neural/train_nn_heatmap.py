@@ -224,14 +224,6 @@ def compute_heatmap_conversion_loss(
 
 
 def main() -> None:
-    device = get_device()
-    print("Using device:", device)
-
-    if device.type == "cuda":
-        print("GPU:", torch.cuda.get_device_name(device))
-    elif device.type == "xpu":
-        print("GPU:", torch.xpu.get_device_name(device))
-
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--data_count",
@@ -245,8 +237,22 @@ def main() -> None:
         default=30,
         help="Number of epochs.",
     )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Whether additional output shall be shown.",
+    )
     args = parser.parse_args()
     config = Config()
+    device = get_device()
+
+    if args.verbose:
+        print("Using device:", device)
+
+        if device.type == "cuda":
+            print("GPU:", torch.cuda.get_device_name(device))
+        elif device.type == "xpu":
+            print("GPU:", torch.xpu.get_device_name(device))
 
     # ------------------------------------------------------------
     # Prepare datasets
@@ -254,16 +260,17 @@ def main() -> None:
 
     torch.manual_seed(123)
     model = NN_v4(config).to(device)
-    print("\nModel:")
-    print(model)
-    print("Model device:", next(model.parameters()).device)
+    if args.verbose:
+        print("\nModel:")
+        print(model)
+        print("Model device:", next(model.parameters()).device)
 
     # ------------------------------------------------------------
     # Prepare datasets
     # ------------------------------------------------------------
 
     train_loader, test_loader = create_dataloaders(
-        N=args.data_count, batch_size=16, config=config
+        N=args.data_count, batch_size=16, print_output=args.verbose, config=config
     )
 
     compute_heatmap_conversion_loss(train_loader, model, 8, 3, device, config)
@@ -281,7 +288,9 @@ def main() -> None:
 
     try:
         for epoch in range(num_epochs):
-            print()
+            if args.verbose:
+                print()
+
             model.train()
             for batch_idx, (features, labels) in enumerate(train_loader):
                 features = features.to(device)
@@ -319,13 +328,15 @@ def main() -> None:
                 optimizer.step()
 
                 ### LOGGING
-                elapsed = time.perf_counter() - start_time
-                completed_batches = epoch * len(train_loader) + batch_idx + 1
-                batches_per_second = completed_batches / elapsed
-                remaining_batches = num_epochs * len(train_loader) - completed_batches
-                eta = remaining_batches / batches_per_second
+                if args.verbose and (batch_idx + 1) % 50 == 0:
+                    elapsed = time.perf_counter() - start_time
+                    completed_batches = epoch * len(train_loader) + batch_idx + 1
+                    batches_per_second = completed_batches / elapsed
+                    remaining_batches = (
+                        num_epochs * len(train_loader) - completed_batches
+                    )
+                    eta = remaining_batches / batches_per_second
 
-                if (batch_idx + 1) % 50 == 0:
                     print(
                         # f"\r"
                         f"Epoch: {epoch + 1:03d}/{num_epochs:03d}"
@@ -341,7 +352,8 @@ def main() -> None:
             )
             epoch_losses.append(epoch_test_loss)
 
-            if epoch_test_loss < best_epoch_loss - 1 and epoch_test_loss < 30:
+            if epoch_test_loss < best_epoch_loss - 1 and epoch_test_loss < 20:
+                print("New best test set MAE loss:", epoch_test_loss)
                 best_epoch_loss = epoch_test_loss
                 save_model(model, config)
 

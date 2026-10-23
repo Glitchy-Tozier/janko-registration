@@ -72,7 +72,7 @@ class PictureDataset(Dataset):
 
     @staticmethod
     def load_synthetic_data(
-        desired_img_count: int, config: Config
+        desired_img_count: int, print_output: bool, config: Config
     ) -> tuple[list, list]:
         """
         Load all images from a directory.
@@ -86,7 +86,9 @@ class PictureDataset(Dataset):
         if not labels_path.exists():
             raise RuntimeError("Asserted synthetic data directory doesn't exist.")
 
-        print("\nLoading data ...")
+        if print_output:
+            print("\nLoading data ...")
+
         X = []
         y = []
 
@@ -120,11 +122,12 @@ class PictureDataset(Dataset):
                 )
                 y.append(tcorners)
 
-                if (idx + 1) % 10 == 0:
-                    print("█", end="", flush=True)
+                if print_output:
+                    if (idx + 1) % 10 == 0:
+                        print("█", end="", flush=True)
 
-                if (idx + 1) % 500 == 0:
-                    print(f" Loaded {idx + 1}/{desired_img_count}")
+                    if (idx + 1) % 500 == 0:
+                        print(f" Loaded {idx + 1}/{desired_img_count}")
 
         return X, y  # torch.tensor(X), torch.tensor(y)
 
@@ -143,11 +146,11 @@ class PictureDataset(Dataset):
 
 
 def create_dataloaders(
-    N: int, batch_size: int, config: Config
+    N: int, batch_size: int, print_output: bool, config: Config
 ) -> tuple[DataLoader, DataLoader]:
     """A reusable way to load data, generate Datasets and create DataLoaders from them."""
     # Load data as lists
-    X, y = PictureDataset.load_synthetic_data(N, config)
+    X, y = PictureDataset.load_synthetic_data(N, print_output, config)
     # train test split
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=config.global_config.test_split_fraction, shuffle=False
@@ -177,6 +180,7 @@ def compute_corner_loss_on_dataset(
     dataloader: DataLoader,
     model: torch.nn.Module,
     device: torch.device,
+    print_output: bool,
     config: Config,
 ) -> float:
     """Calculate mean absolute corner-coordinate error in pixels."""
@@ -188,11 +192,13 @@ def compute_corner_loss_on_dataset(
     total_absolute_error = 0.0
     total_coordinates = 0
 
-    print("Calculating corner MAE ...")
+    if print_output:
+        print("Calculating corner MAE ...")
 
     with torch.inference_mode():
         for features, labels in dataloader:
-            print("█", end="", flush=True)
+            if print_output:
+                print("█", end="", flush=True)
             features = features.to(device)
             labels = labels.to(device)
 
@@ -207,7 +213,8 @@ def compute_corner_loss_on_dataset(
 
     mean_mae = round(total_absolute_error / total_coordinates, 2)
 
-    print("\nMean corner MAE over (test?) dataset:", mean_mae, "(in px)")
+    if print_output:
+        print("\nMean corner MAE over (test?) dataset:", mean_mae, "(in px)")
 
     return mean_mae
 
