@@ -358,7 +358,9 @@ def main() -> None:
                 save_model(model, config)
 
     except KeyboardInterrupt:
-        compute_corner_loss_on_dataset(test_loader, model, device, config)
+        compute_corner_loss_on_dataset(test_loader, model, device, True, config)
+
+    if best_epoch_loss != epoch_losses[-1]:
         save_model(model, config)
 
     print("\nCorner losses across all batches:")

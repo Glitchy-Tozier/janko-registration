@@ -324,9 +324,10 @@ def main() -> None:
 
     except KeyboardInterrupt:
         print(" → Detected CTRL+C → stopping execution, starting final test.")
+        compute_corner_loss_on_dataset(test_loader, model, device, True, config)
 
-    compute_corner_loss_on_dataset(test_loader, model, device, True, config)
-    save_model(model, config)
+    if best_epoch_loss != epoch_losses[-1]:
+        save_model(model, config)
 
     print("\nCorner losses across all batches:")
     print(epoch_losses)
