@@ -73,7 +73,7 @@ class NN_v4(torch.nn.Module):
         # One Gaussian kernel per corner.
         self.register_buffer(
             "gaussian_kernel",
-            gaussian_2d[None, None].repeat(4, 1, 1, 1),
+            gaussian_2d[None, None].repeat(self.num_outputs, 1, 1, 1),
         )
 
     def forward(self, image_data: torch.Tensor) -> torch.Tensor:
