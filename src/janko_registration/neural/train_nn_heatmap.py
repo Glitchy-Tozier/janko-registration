@@ -273,7 +273,8 @@ def main() -> None:
         N=args.data_count, batch_size=16, print_output=args.verbose, config=config
     )
 
-    compute_heatmap_conversion_loss(train_loader, model, 8, 3, device, config)
+    if args.verbose:
+        compute_heatmap_conversion_loss(train_loader, model, 8, 3, device, config)
 
     # ------------------------------------------------------------
     # Train model
@@ -348,7 +349,7 @@ def main() -> None:
                     )
 
             epoch_test_loss = compute_corner_loss_on_dataset(
-                test_loader, model, device, config
+                test_loader, model, device, args.verbose, config
             )
             epoch_losses.append(epoch_test_loss)
 
