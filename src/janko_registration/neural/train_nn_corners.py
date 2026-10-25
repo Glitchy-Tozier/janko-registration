@@ -29,8 +29,10 @@ class CornerModelBase(torch.nn.Module):
 
         x = self.features(x)
         x = self.output(x)
+        x = x.view(batch_size, -1, 2)
+        # x = torch.sigmoid(x)
 
-        return x.view(batch_size, -1, 2)
+        return x
 
     def model_output_to_points(self, x: torch.Tensor, config: Config) -> torch.Tensor:
         """
@@ -45,7 +47,7 @@ class CornerModelBase(torch.nn.Module):
 
 # This performed worst, likely due to me discarding locality with `AdaptiveAvgPool2d`.
 # Best achieved loss: ~0.200
-class NN_v1(CornerModelBase):
+class CN_v01(CornerModelBase):
     def __init__(self, config: Config):
         super().__init__(config)
 
@@ -94,7 +96,7 @@ class NN_v1(CornerModelBase):
 
 # This performed best so far
 # Best achieved loss: ~0.062 on the test dataset
-class NN_v2(CornerModelBase):
+class CN_v02(CornerModelBase):
     def __init__(self, config: Config):
         super().__init__(config)
 
@@ -124,8 +126,8 @@ class NN_v2(CornerModelBase):
         )
 
 
-# This performed only slightly better than `NN_v1`
-class NN_v3(CornerModelBase):
+# This performed only slightly better than `CN_v01`
+class CN_v03(CornerModelBase):
     def __init__(self, config: Config):
         super().__init__(config)
 
@@ -158,45 +160,163 @@ class NN_v3(CornerModelBase):
             torch.nn.ReLU(),
             torch.nn.Linear(64, self.num_outputs),
         )
-            torch.nn.ReLU(),
-            torch.nn.Linear(1024, 256),  # [B, 256]
-            torch.nn.ReLU(),
-            torch.nn.Linear(256, 64),  # [B, 64]
-            torch.nn.ReLU(),
-            torch.nn.Linear(64, 8),  # [B, 8]
-        )
 
 
-# Maybe more linear Layers are what's needed?
-class NN_v5(CornerModelBase):
+class CN_v06(CornerModelBase):
     def __init__(self, config: Config):
-        super().__init__()
+        super().__init__(config)
 
         self.features = torch.nn.Sequential(
-            torch.nn.Conv2d(config.features.count, 16, kernel_size=7, padding=3),
+            torch.nn.Conv2d(config.features.count, 8, kernel_size=7, padding=3),
             torch.nn.ReLU(),
-            # torch.nn.MaxPool2d(2),
-            torch.nn.Conv2d(8, 32, kernel_size=7, padding=3),
-            torch.nn.ReLU(),
-            torch.nn.MaxPool2d(2),
-            torch.nn.Conv2d(32, 64, kernel_size=7, padding=3),
+            torch.nn.Conv2d(8, 16, kernel_size=7, padding=3),
             torch.nn.ReLU(),
             torch.nn.MaxPool2d(2),
-            torch.nn.Conv2d(64, 32, kernel_size=7, padding=3),
+            torch.nn.Conv2d(16, 32, kernel_size=7, padding=3),
+            torch.nn.ReLU(),
+            torch.nn.MaxPool2d(2),
+            torch.nn.Conv2d(32, 32, kernel_size=7, padding=3, stride=2),
             torch.nn.ReLU(),
         )
 
         self.output = torch.nn.Sequential(
             torch.nn.Flatten(),
-            torch.nn.Linear(257280, 1024),
+            torch.nn.LazyLinear(1024),
             torch.nn.ReLU(),
             torch.nn.Linear(1024, 256),
             torch.nn.ReLU(),
+            torch.nn.Linear(256, 64),
+            torch.nn.ReLU(),
+            torch.nn.Linear(64, self.num_outputs),
+        )
+
+
+class CN_v07(CornerModelBase):
+    def __init__(self, config: Config):
+        super().__init__(config)
+
+        self.features = torch.nn.Sequential(
+            torch.nn.Conv2d(config.features.count, 8, kernel_size=7, padding=3),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(8, 16, kernel_size=7, padding=3),
+            torch.nn.ReLU(),
+            torch.nn.MaxPool2d(2),
+            torch.nn.Conv2d(16, 32, kernel_size=7, padding=3, stride=2),
+            torch.nn.ReLU(),
+            torch.nn.MaxPool2d(2),
+            torch.nn.Conv2d(32, 32, kernel_size=7, padding=3, stride=2),
+            torch.nn.ReLU(),
+        )
+
+        self.output = torch.nn.Sequential(
+            torch.nn.Flatten(),
+            torch.nn.LazyLinear(1024),
+            torch.nn.ReLU(),
+            torch.nn.Linear(1024, 256),
+            torch.nn.ReLU(),
+            # torch.nn.Linear(512, 256),
+            # torch.nn.ReLU(),
             torch.nn.Linear(256, 128),
             torch.nn.ReLU(),
-            torch.nn.Linear(128, 32),
+            torch.nn.Linear(128, self.num_outputs),
+        )
+
+
+class CN_v08(CornerModelBase):
+    def __init__(self, config: Config):
+        super().__init__(config)
+
+        self.features = torch.nn.Sequential(
+            torch.nn.Conv2d(
+                config.features.count, 8, kernel_size=7, padding=3, stride=2
+            ),
             torch.nn.ReLU(),
-            torch.nn.Linear(32, 8),
+            torch.nn.Conv2d(8, 16, kernel_size=7, padding=3, stride=2),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(16, 32, kernel_size=7, padding=3, stride=2),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(32, 32, kernel_size=7, padding=3, stride=2),
+            torch.nn.ReLU(),
+        )
+
+        self.output = torch.nn.Sequential(
+            torch.nn.Flatten(),
+            torch.nn.LazyLinear(1024),
+            torch.nn.ReLU(),
+            torch.nn.Linear(1024, 512),
+            torch.nn.ReLU(),
+            torch.nn.Linear(512, 256),
+            torch.nn.ReLU(),
+            # torch.nn.Linear(256, 128),
+            # torch.nn.ReLU(),
+            torch.nn.Linear(256, self.num_outputs),
+        )
+
+
+class CN_v09(CornerModelBase):
+    def __init__(self, config: Config):
+        super().__init__(config)
+
+        self.features = torch.nn.Sequential(
+            torch.nn.Conv2d(
+                config.features.count, 8, kernel_size=7, padding=3, stride=2
+            ),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(8, 16, kernel_size=7, padding=3, stride=2),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(16, 32, kernel_size=7, padding=3, stride=2),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(32, 64, kernel_size=7, padding=3, stride=2),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(64, 64, kernel_size=7, padding=3),
+            torch.nn.ReLU(),
+        )
+
+        self.output = torch.nn.Sequential(
+            torch.nn.Flatten(),
+            torch.nn.LazyLinear(1024),
+            torch.nn.ReLU(),
+            torch.nn.Linear(1024, 512),
+            torch.nn.ReLU(),
+            torch.nn.Linear(512, 256),
+            torch.nn.ReLU(),
+            torch.nn.Linear(256, self.num_outputs),
+        )
+
+
+class CN_v10(CornerModelBase):
+    def __init__(self, config: Config):
+        super().__init__(config)
+
+        dropout_rate = 0.1
+        kernel_size = 3
+        padding = int((kernel_size - 1) / 2)
+
+        self.features = torch.nn.Sequential(
+            torch.nn.Conv2d(
+                config.features.count, 8, kernel_size=kernel_size, padding=padding
+            ),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(8, 16, kernel_size=kernel_size, padding=padding),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(16, 32, kernel_size=kernel_size, padding=padding),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(32, 16, kernel_size=kernel_size, padding=padding),
+            torch.nn.ReLU(),
+        )
+
+        self.output = torch.nn.Sequential(
+            torch.nn.Flatten(),
+            torch.nn.LazyLinear(256),
+            torch.nn.ReLU(),
+            torch.nn.Dropout(p=dropout_rate),
+            torch.nn.Linear(256, 512),
+            torch.nn.ReLU(),
+            torch.nn.Dropout(p=dropout_rate),
+            torch.nn.Linear(512, 256),
+            torch.nn.ReLU(),
+            torch.nn.Dropout(p=dropout_rate),
+            torch.nn.Linear(256, self.num_outputs),
         )
 
 
@@ -236,6 +356,7 @@ def main() -> None:
     # ------------------------------------------------------------
 
     torch.manual_seed(123)
+    model = CN_v09(config).to(device)
     if args.verbose:
         print("\nModel:")
         print(model)

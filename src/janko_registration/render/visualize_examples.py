@@ -10,8 +10,18 @@ import pandas as pd
 import torch
 
 from janko_registration.neural.helpers import PictureDataset
-from janko_registration.neural.train_nn_corners import NN_v1, NN_v2, NN_v3, NN_v5
-from janko_registration.neural.train_nn_heatmap import NN_v4
+from janko_registration.neural.train_nn_corners import (
+    CN_v01,
+    CN_v02,
+    CN_v03,
+    CN_v06,
+    CN_v07,
+    CN_v08,
+    CN_v09,
+    CN_v10,
+)
+from janko_registration.neural.train_nn_edge_intersections import EI_v01
+from janko_registration.neural.train_nn_heatmap import CH_v04
 from janko_registration.utils import Config
 
 
@@ -392,15 +402,20 @@ def main() -> None:
 
     model_path = config.global_config.model_dir / args.model_name
     model_map = {
-        "NN_v1": NN_v1,
-        "NN_v2": NN_v2,
-        "NN_v3": NN_v3,
-        "NN_v4": NN_v4,
-        "NN_v5": NN_v5,
+        "CN_v01": CN_v01,
+        "CN_v02": CN_v02,
+        "CN_v03": CN_v03,
+        "CH_v04": CH_v04,
+        "CN_v06": CN_v06,
+        "CN_v07": CN_v07,
+        "CN_v08": CN_v08,
+        "CN_v09": CN_v09,
+        "CN_v10": CN_v10,
+        "EI_v01": EI_v01,
     }
 
     torch.manual_seed(123)
-    model_class = model_map[args.model_name[:5]]
+    model_class = model_map[args.model_name[:6]]
     model = model_class(config)
     model.load_state_dict(torch.load(model_path, weights_only=True))
     model.eval()

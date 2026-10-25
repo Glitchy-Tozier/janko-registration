@@ -8,7 +8,7 @@ import torch
 import torch.nn.functional as F
 
 from janko_registration.neural.helpers import (
-    compute_corner_loss_on_dataset,
+    compute_loss_on_dataset,
     create_dataloaders,
     get_device,
     save_model,
@@ -16,7 +16,7 @@ from janko_registration.neural.helpers import (
 from janko_registration.utils import Config, format_duration
 
 
-class NN_v4(torch.nn.Module):
+class CH_v04(torch.nn.Module):
     def __init__(self, config: Config):
         super().__init__()
 
@@ -259,7 +259,7 @@ def main() -> None:
     # ------------------------------------------------------------
 
     torch.manual_seed(123)
-    model = NN_v4(config).to(device)
+    model = CH_v04(config).to(device)
     if args.verbose:
         print("\nModel:")
         print(model)
