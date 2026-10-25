@@ -353,7 +353,7 @@ def main() -> None:
             )
             epoch_losses.append(epoch_test_loss)
 
-            if epoch_test_loss < best_epoch_loss - 1 and epoch_test_loss < 20:
+            if epoch_test_loss < best_epoch_loss - 1 and epoch_test_loss < 15:
                 print("New best test set MAE loss:", epoch_test_loss)
                 best_epoch_loss = epoch_test_loss
                 save_model(model, config)

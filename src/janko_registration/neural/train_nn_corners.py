@@ -201,14 +201,6 @@ class NN_v5(CornerModelBase):
 
 
 def main() -> None:
-    device = get_device()
-    print("Using device:", device)
-
-    if device.type == "cuda":
-        print("GPU:", torch.cuda.get_device_name(device))
-    elif device.type == "xpu":
-        print("GPU:", torch.xpu.get_device_name(device))
-
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--data_count",
@@ -317,7 +309,7 @@ def main() -> None:
             )
             epoch_losses.append(epoch_test_loss)
 
-            if epoch_test_loss < best_epoch_loss - 1 and epoch_test_loss < 20:
+            if epoch_test_loss < best_epoch_loss - 1 and epoch_test_loss < 15:
                 print("New best test set MAE loss:", epoch_test_loss)
                 best_epoch_loss = epoch_test_loss
                 save_model(model, config)
