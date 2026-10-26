@@ -123,10 +123,10 @@ class PictureDataset(Dataset):
                 y.append(tcorners)
 
                 if print_output:
-                    if (idx + 1) % 10 == 0:
+                    if (idx + 1) % 20 == 0:
                         print("█", end="", flush=True)
 
-                    if (idx + 1) % 500 == 0:
+                    if (idx + 1) % 1000 == 0:
                         print(f" Loaded {idx + 1}/{desired_img_count}")
 
         return X, y  # torch.tensor(X), torch.tensor(y)
