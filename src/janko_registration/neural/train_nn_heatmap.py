@@ -320,9 +320,9 @@ def main() -> None:
                     reduction="batchmean",
                 )
 
-                pred_corners = model.model_output_to_corners(prediction, config)
+                pred_corners = model.model_output_to_points(prediction, config)
                 true_corners = labels
-                l1 = F.l1_loss(pred_corners, true_corners)
+                l1 = F.l1_loss(true_corners, pred_corners)
 
                 optimizer.zero_grad()
                 loss.backward()
@@ -348,8 +348,8 @@ def main() -> None:
                         flush=True,
                     )
 
-            epoch_test_loss = compute_corner_loss_on_dataset(
-                test_loader, model, device, args.verbose, config
+            epoch_test_loss = compute_loss_on_dataset(
+                test_loader, model, device, True, args.verbose, config
             )
             epoch_losses.append(epoch_test_loss)
 
@@ -359,7 +359,7 @@ def main() -> None:
                 save_model(model, config)
 
     except KeyboardInterrupt:
-        compute_corner_loss_on_dataset(test_loader, model, device, True, config)
+        compute_loss_on_dataset(test_loader, model, device, True, True, config)
 
     if best_epoch_loss != epoch_losses[-1]:
         save_model(model, config)

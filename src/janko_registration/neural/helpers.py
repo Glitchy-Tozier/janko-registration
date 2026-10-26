@@ -176,10 +176,11 @@ def create_dataloaders(
     return (train_loader, test_loader)
 
 
-def compute_corner_loss_on_dataset(
+def compute_loss_on_dataset(
     dataloader: DataLoader,
     model: torch.nn.Module,
     device: torch.device,
+    convert_to_points: bool,
     print_output: bool,
     config: Config,
 ) -> float:
@@ -203,9 +204,10 @@ def compute_corner_loss_on_dataset(
             labels = labels.to(device)
 
             prediction = model(features)
-            pred_corners = model.model_output_to_points(prediction, config)
+            if convert_to_points:
+                prediction = model.model_output_to_points(prediction, config)
 
-            total_absolute_error += criterion(labels, pred_corners).item()
+            total_absolute_error += criterion(labels, prediction).item()
             total_coordinates += labels.numel()
 
     if total_coordinates == 0:

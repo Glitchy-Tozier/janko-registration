@@ -42,6 +42,49 @@ def transform_points(
     return transformed_points.reshape(-1, 2)
 
 
+def get_piano_edge_y_at_sides(
+    piano_geometry: PianoGeometry,
+    homography: np.ndarray,
+    image_width: int,
+) -> np.ndarray:
+    """
+    Calculate where the extended top and bottom edges of the piano
+    cross the left and right image borders.
+
+    Returns an array of shape (4,), ordered as:
+        [
+            top edge at left,
+            top edge at right,
+            bottom edge at left,
+            bottom edge at right
+        ]
+    """
+    top_left, top_right, bottom_right, bottom_left = transform_points(
+        piano_geometry.bounding_box,
+        homography,
+    )
+
+    def get_y_at_x(start_point, end_point, x):
+        delta_x = end_point[0] - start_point[0]
+
+        if abs(delta_x) < 1e-8:
+            raise ValueError("Piano edge is parallel to the image's vertical borders.")
+
+        return (
+            start_point[1]
+            + (x - start_point[0]) * (end_point[1] - start_point[1]) / delta_x
+        )
+
+    return np.array(
+        [
+            get_y_at_x(top_left, top_right, 0),
+            get_y_at_x(top_left, top_right, image_width),
+            get_y_at_x(bottom_left, bottom_right, 0),
+            get_y_at_x(bottom_left, bottom_right, image_width),
+        ]
+    )
+
+
 def rotation_matrix(
     angle_degrees: float,
 ) -> np.ndarray:
@@ -835,6 +878,7 @@ def generate_sample_image(
     np.ndarray,
     list[int],
     np.ndarray,
+    np.ndarray,
 ]:
     """
     Generate one synthetic image and its complete ground-truth metadata.
@@ -852,6 +896,9 @@ def generate_sample_image(
             Transformed centers of the sub-key components in those octaves.
         visible_indices_octaves:
             Indices of keys in the selected octaves.
+        target_piano_edge_y_at_sides:
+            Y-coordinates of the extended top and bottom piano edges at
+            the left and right image borders.
         homography:
             Transformation from canonical piano coordinates to image coordinates.
     """
@@ -987,6 +1034,16 @@ def generate_sample_image(
     )
 
     # ------------------------------------------------------------
+    # Ground-truth top and bottom edges at the image borders.
+    # ------------------------------------------------------------
+
+    target_piano_edge_y_at_sides = get_piano_edge_y_at_sides(
+        piano_geometry,
+        homography,
+        image_width=config.generator.base_image_width,
+    )
+
+    # ------------------------------------------------------------
     # Global image effects.
     # ------------------------------------------------------------
 
@@ -1005,6 +1062,7 @@ def generate_sample_image(
         target_corners_octaves,
         target_centers_octaves,
         visible_indices_octaves,
+        target_piano_edge_y_at_sides,
         homography,
     )
 
@@ -1044,6 +1102,7 @@ def generate_dataset(
                 target_corners_octaves,
                 target_centers_octaves,
                 visible_indices_octaves,
+                target_piano_edge_y_at_sides,
                 homography,
             ) = generate_sample_image(
                 piano_geometry,
@@ -1070,6 +1129,7 @@ def generate_dataset(
                 "target_corners_octaves": target_corners_octaves.tolist(),
                 "target_centers_octaves": target_centers_octaves.tolist(),
                 "visible_indices_octaves": visible_indices_octaves,
+                "target_piano_edge_y_at_sides": (target_piano_edge_y_at_sides.tolist()),
                 "homography": homography.tolist(),
             }
 

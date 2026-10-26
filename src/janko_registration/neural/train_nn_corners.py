@@ -7,7 +7,7 @@ import torch
 import torch.nn.functional as F
 
 from janko_registration.neural.helpers import (
-    compute_corner_loss_on_dataset,
+    compute_loss_on_dataset,
     create_dataloaders,
     get_device,
     save_model,
@@ -425,8 +425,8 @@ def main() -> None:
                         flush=True,
                     )
 
-            epoch_test_loss = compute_corner_loss_on_dataset(
-                test_loader, model, device, args.verbose, config
+            epoch_test_loss = compute_loss_on_dataset(
+                test_loader, model, device, True, args.verbose, config
             )
             epoch_losses.append(epoch_test_loss)
 
@@ -437,7 +437,7 @@ def main() -> None:
 
     except KeyboardInterrupt:
         print(" → Detected CTRL+C → stopping execution, starting final test.")
-        compute_corner_loss_on_dataset(test_loader, model, device, True, config)
+        compute_loss_on_dataset(test_loader, model, device, True, True, config)
 
     if best_epoch_loss != epoch_losses[-1]:
         save_model(model, config)

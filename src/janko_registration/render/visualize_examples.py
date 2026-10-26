@@ -8,6 +8,7 @@ import cv2
 import numpy as np
 import pandas as pd
 import torch
+import torch.nn.functional as F
 
 from janko_registration.neural.helpers import PictureDataset
 from janko_registration.neural.train_nn_corners import (
@@ -233,6 +234,48 @@ def draw_points_on_picture(
     return image
 
 
+def draw_lines_on_picture(
+    image: np.ndarray,
+    points: torch.Tensor,
+    color: tuple[int, int, int],
+    alpha: float = 0.5,
+) -> np.ndarray:
+    # Ensure points are integer pixel coordinates
+    points = np.asarray(points).round().astype(np.int32)
+
+    # Draw onto a separate overlay
+    overlay = image.copy()
+
+    # Semi-transparent boundary lines
+    cv2.line(
+        overlay,
+        points[0],
+        points[1],
+        color=color,
+        thickness=3,
+        lineType=cv2.LINE_AA,
+    )
+    cv2.line(
+        overlay,
+        points[2],
+        points[3],
+        color=color,
+        thickness=3,
+        lineType=cv2.LINE_AA,
+    )
+
+    # Blend overlay with the image
+    image = cv2.addWeighted(
+        overlay,
+        alpha,
+        image,
+        1.0 - alpha,
+        0,
+    )
+
+    return image
+
+
 def add_deviation_lines(
     image: np.ndarray,
     true_points: torch.Tensor,
@@ -276,6 +319,7 @@ def save_prediction_on_picture(
     image: np.ndarray,
     true_points: torch.Tensor | None,
     pred_points: torch.Tensor,
+    model_type: str,
     config: Config,
 ) -> None:
     # original image resolution
@@ -298,11 +342,18 @@ def save_prediction_on_picture(
     red = (0, 0, 255)
 
     # Draw predicted and actual shapes onto image (if they exist)
-    add_square = config.global_config.labels_count <= 4
+    add_square = model_type == "CN_v"
+    add_horizontal_lines = model_type == "EI_v"
     add_d_lines = not add_square
+
     if true_points is not None:
         image = draw_points_on_picture(image, true_points, blue, add_square)
+        if add_horizontal_lines:
+            image = draw_lines_on_picture(image, true_points, blue)
+
     image = draw_points_on_picture(image, pred_points, green, add_square)
+    if add_horizontal_lines:
+        image = draw_lines_on_picture(image, pred_points, green)
 
     if add_d_lines and true_points is not None:
         image = add_deviation_lines(image, true_points, pred_points, red)
@@ -342,7 +393,7 @@ def main() -> None:
     parser.add_argument(
         "--test_start_idx",
         type=int,
-        default=800,
+        required=True,
         help="Number of synthetic example images to load. Use -1 to load all.",
     )
     parser.add_argument(
@@ -383,7 +434,7 @@ def main() -> None:
         config,
     )
     df_synth = pd.concat([df_train, df_test], ignore_index=True, sort=False)
-    print(df_synth.shape)
+    print("df-shape:", df_synth.shape)
 
     # ------------------------------------------------------------
     # Prepare real dataset
@@ -400,6 +451,7 @@ def main() -> None:
     # Load model
     # ------------------------------------------------------------
 
+    model_type = args.model_name[:4]
     model_path = config.global_config.model_dir / args.model_name
     model_map = {
         "CN_v01": CN_v01,
@@ -419,26 +471,31 @@ def main() -> None:
     model = model_class(config)
     model.load_state_dict(torch.load(model_path, weights_only=True))
     model.eval()
+
     if args.verbose:
         print("\nModel:")
         print(model)
 
     for _, row in df_synth.iterrows():
         features = row["timage"]
-        labels = row[config.global_config.labels_column]
+        labels = torch.tensor(row[config.global_config.labels_column])
         with torch.no_grad():
             prediction = model(features)
 
         pred_points = model.model_output_to_points(prediction, config).squeeze(0)
-        true_points = labels
 
-        # true_points_sdown = labels.clone()  # scaled down
-        # true_points_sdown[:, 0] /= config.generator.base_image_width
-        # true_points_sdown[:, 1] /= config.generator.base_image_height
+        if model_type == "EI_v":
+            labels = labels.unsqueeze(0)
+            loss = F.l1_loss(labels, prediction)
+            true_points = model.model_output_to_points(labels, config).squeeze(0)
+        else:
+            true_points = torch.tensor(labels)
+            loss = F.l1_loss(true_points, pred_points)
 
         if args.verbose:
-            print(pred_points)
-            print(true_points)
+            for p in [true_points, pred_points]:
+                print(p)
+        print(f"Corner MEA: {loss:.3f}")
 
         save_prediction_on_picture(
             model_path.stem,
@@ -446,6 +503,7 @@ def main() -> None:
             row["image"],
             true_points,
             pred_points,
+            model_type,
             config,
         )
 
@@ -461,6 +519,7 @@ def main() -> None:
             row["image_original"],
             None,
             pred_points,
+            model_type,
             config,
         )
 
