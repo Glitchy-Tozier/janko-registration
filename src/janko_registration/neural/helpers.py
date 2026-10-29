@@ -117,10 +117,10 @@ class PictureDataset(Dataset):
                 timage = torch.from_numpy(image).permute(2, 0, 1).float() / 255.0
                 X.append(timage)
 
-                tcorners = torch.tensor(
+                tfeatures = torch.tensor(
                     metadata[config.global_config.labels_column], dtype=torch.float32
                 )
-                y.append(tcorners)
+                y.append(tfeatures)
 
                 if print_output and (idx + 1) % 20 == 0:
                     print(
