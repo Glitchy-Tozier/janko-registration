@@ -87,7 +87,7 @@ class PictureDataset(Dataset):
             raise RuntimeError("Asserted synthetic data directory doesn't exist.")
 
         if print_output:
-            print("\nLoading data ...")
+            print()
 
         X = []
         y = []
@@ -122,13 +122,12 @@ class PictureDataset(Dataset):
                 )
                 y.append(tcorners)
 
-                if print_output:
-                    if (idx + 1) % 20 == 0:
-                        print("█", end="", flush=True)
-
-                    if (idx + 1) % 1000 == 0:
-                        print(f" Loaded {idx + 1}/{desired_img_count}")
-
+                if print_output and (idx + 1) % 20 == 0:
+                    print(
+                        f"\rLoading images ... loaded {idx + 1}/{desired_img_count} images.",
+                        end="",
+                    )
+        print(" Done!")
         return X, y  # torch.tensor(X), torch.tensor(y)
 
     def __init__(self, X, y):
