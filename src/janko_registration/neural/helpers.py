@@ -114,8 +114,10 @@ class PictureDataset(Dataset):
                 #   C x H x W
                 #
                 # So we "rotate" dimensions
-                timage = torch.from_numpy(image).permute(2, 0, 1).float() / 255.0
+                timage = torch.from_numpy(image).permute(2, 0, 1).float()
+                timage.div_(255.0)  # Inplace division to avoid random memory bugs
                 X.append(timage)
+                # del image
 
                 tfeatures = torch.tensor(
                     metadata[config.global_config.labels_column], dtype=torch.float32
