@@ -77,7 +77,7 @@ def load_synthetic_data(
         #   C x H x W
         #
         # So we "rotate" dimensions
-        prepared_image = PictureDataset.prepare_features(image, config.features)
+        prepared_image = PictureDataset.prepare_features(image, config)
         timage = (
             torch.from_numpy(prepared_image).permute(2, 0, 1).unsqueeze(0).float()
             / 255.0
@@ -153,7 +153,7 @@ def load_real_pictures(
         #   C x H x W
         #
         # So we "rotate" dimensions
-        prepared_image = PictureDataset.prepare_features(image_resized, config.features)
+        prepared_image = PictureDataset.prepare_features(image_resized, config)
         timage = (
             torch.from_numpy(prepared_image).permute(2, 0, 1).unsqueeze(0).float()
             / 255.0

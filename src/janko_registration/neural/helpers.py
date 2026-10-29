@@ -4,11 +4,12 @@ import json
 
 import cv2
 import numpy as np
+import pandas as pd
 import torch
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, Dataset
 
-from janko_registration.utils import Config, FeaturesConfig, get_datetime_str
+from janko_registration.utils import Config, get_datetime_str
 
 
 def get_device() -> torch.device:
@@ -23,52 +24,160 @@ def get_device() -> torch.device:
 
 class PictureDataset(Dataset):
     @staticmethod
-    def prepare_features(image: np.ndarray, features: FeaturesConfig) -> np.ndarray:
+    def prepare_features(image: np.ndarray, config: Config) -> np.ndarray:
         """
-        Remove color information or add grayscale / edge detection layers to the image.
-        Can be adapted in the global `config.yaml` file.
+        Extract and combine image features into a single H x W x C array.
+
+        Supported features:
+            - Normalized BGR color channels
+            - Grayscale
+            - Canny edge detection
+            - Sobel gradient magnitude
+            - Probabilistic Hough line detection
+
+        All output channels use uint8 values in the range 0-255.
+        The resulting array can be normalized to 0-1 when converted
+        to a PyTorch tensor.
         """
+        img_color = cv2.normalize(
+            image, None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX
+        ).astype(np.uint8)
+        features = config.features
+        result = []
+
         if features.keep_colors:
-            result = [image]
-        else:
-            result = []
+            result.append(img_color)
 
-        if features.add_grayscale or features.add_canny or features.add_sobel:
-            img_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        needs_gray = (
+            features.add_grayscale
+            or features.add_canny
+            or features.add_sobel
+            or features.add_lines
+        )
+        if needs_gray:
+            img_gray = cv2.cvtColor(img_color, cv2.COLOR_BGR2GRAY)
 
-            if features.add_grayscale:
-                result.append(img_gray[..., None])
+        # Reused for Hough line detection
+        if features.add_canny or features.add_lines:
+            img_canny = cv2.Canny(
+                img_gray,
+                threshold1=1000,
+                threshold2=500,
+                apertureSize=5,
+            )
 
-            if features.add_canny:
-                canny = cv2.Canny(img_gray, 50, 150, 5)
-                result.append(canny[..., None])
+        if features.add_grayscale:
+            result.append(img_gray[..., None])
 
-            if features.add_sobel:
-                gx = cv2.Sobel(img_gray, cv2.CV_32F, 1, 0, ksize=3)
-                gy = cv2.Sobel(img_gray, cv2.CV_32F, 0, 1, ksize=3)
+        if features.add_canny:
+            result.append(img_canny[..., None])
 
-                mag = cv2.magnitude(gx, gy)
-                mag = cv2.normalize(mag, None, 0, 1, cv2.NORM_MINMAX)
-                result.append(mag[..., None])
+        if features.add_sobel:
+            gx = cv2.Sobel(img_gray, cv2.CV_32F, dx=1, dy=0, ksize=3)
+            gy = cv2.Sobel(img_gray, cv2.CV_32F, dx=0, dy=1, ksize=3)
 
-        result = np.concatenate(result, axis=2)
+            mag = cv2.magnitude(gx, gy)
+            img_sobel = cv2.normalize(
+                mag, None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX
+            ).astype(np.uint8)
+            # mag = cv2.normalize(mag, None, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX) # Old, wrong implementation
 
-        if features.show_previews and (
-            features.add_grayscale or features.add_canny or features.add_sobel
-        ):
-            if not features.keep_colors:
-                cv2.imshow("original", image)
-            if features.add_grayscale:
+            result.append(img_sobel[..., None])
+
+        # Probabilistic Hough line detection:
+        # Detect long, approximately horizontal line segments.
+        if features.add_lines:
+            _height, width = img_gray.shape
+
+            # Binary mask containing the selected line segments.
+            line_mask = np.zeros_like(img_gray, dtype=np.uint8)
+
+            # Initial parameters relative to image width.
+            min_line_length = max(30, int(width * 0.12))
+            max_line_gap = max(5, int(width * 0.05))
+
+            min_line_count = 15
+            for threshold in range(160, 20, -20):
+                lines = cv2.HoughLinesP(
+                    img_canny,
+                    rho=1,
+                    theta=np.pi / 180,
+                    threshold=threshold,
+                    minLineLength=min_line_length,
+                    maxLineGap=max_line_gap,
+                )
+
+                if lines is not None and len(lines) >= min_line_count:
+                    if features.show_previews:
+                        print(threshold)
+                    break
+                else:
+                    continue
+
+            try:
+                for x1, y1, x2, y2 in lines:
+                    # Calculate the line's angle relative to horizontal.
+                    angle = abs(np.degrees(np.arctan2(y2 - y1, x2 - x1)))
+                    # Treat lines pointing in opposite directions equally.
+                    angle = min(angle, 180.0 - angle)
+
+                    # Use max rotation angle from config, including a safety
+                    # buffer due to perspective distortion
+                    if angle <= config.generator.rotation_max_degrees + 10:
+                        cv2.line(
+                            line_mask,
+                            (x1, y1),
+                            (x2, y2),
+                            color=255,
+                            thickness=2,
+                            lineType=cv2.LINE_8,
+                        )
+                if len(lines) < min_line_count:
+                    print(
+                        f"\n    config: add_lines: Could only detect {len(lines)} lines on image."
+                    )
+                    """ cv2.imshow("original", img_color)
+                    cv2.imshow("grayscale", img_gray)
+                    cv2.imshow("canny", img_canny)
+                    cv2.imshow("lines", line_mask[..., None])
+                    cv2.waitKey(0)
+                    cv2.destroyAllWindows() """
+            except ValueError:
+                print("\n    Could not detect any lines in image.")
+            result.append(line_mask[..., None])
+
+        # Validate and combine the feature channels
+        if not result:
+            raise ValueError("No image features enabled.")
+
+        combined = np.concatenate(result, axis=2)
+
+        # Previews
+        if features.show_previews:
+            # Flatten first 10 rows, first 10 columns across all channels
+            for c in range(combined.shape[2]):
+                channel = combined[..., c]
+                df = pd.DataFrame(
+                    channel[:10, :10], columns=[f"col_{i}" for i in range(10)]
+                )
+                print(f"\nChannel {c}:")
+                print(df.to_string(float_format=lambda x: f"{x:.0f}"))
+
+            cv2.imshow("original", image)
+            cv2.imshow("normalized color", img_color)
+            if "img_gray" in locals():
                 cv2.imshow("grayscale", img_gray)
-            if features.add_canny:
-                cv2.imshow("canny", canny)
-            if features.add_sobel:
-                cv2.imshow("sobel", mag)
+            if "img_canny" in locals():
+                cv2.imshow("canny", img_canny)
+            if "img_sobel" in locals():
+                cv2.imshow("sobel", img_sobel)
+            if "line_mask" in locals():
+                cv2.imshow("hough_lines", line_mask)
 
             cv2.waitKey(0)
             cv2.destroyAllWindows()
 
-        return result
+        return combined
 
     @staticmethod
     def load_synthetic_data(
@@ -105,7 +214,7 @@ class PictureDataset(Dataset):
                     print(f"Warning: could not read {image_path}")
                     continue
 
-                image = PictureDataset.prepare_features(image, config.features)
+                image = PictureDataset.prepare_features(image, config)
 
                 # NumPy is:
                 #   H x W x C

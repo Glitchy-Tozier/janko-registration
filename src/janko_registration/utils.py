@@ -67,11 +67,12 @@ class GeneratorConfig:
 
 @dataclass
 class FeaturesConfig:
+    show_previews: bool
     keep_colors: bool
     add_grayscale: bool
     add_canny: bool
     add_sobel: bool
-    show_previews: bool
+    add_lines: bool
 
     @property
     def count(self) -> int:
@@ -80,6 +81,7 @@ class FeaturesConfig:
                 self.add_grayscale,
                 self.add_canny,
                 self.add_sobel,
+                self.add_lines,
             )
         )
 
@@ -145,6 +147,7 @@ class Config:
             add_grayscale=bool(features_cfg["add_grayscale"]),
             add_canny=bool(features_cfg["add_canny"]),
             add_sobel=bool(features_cfg["add_sobel"]),
+            add_lines=bool(features_cfg["add_lines"]),
         )
 
         self.heatmap = HeatmapConfig(
